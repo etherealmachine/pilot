@@ -1,0 +1,40 @@
+<dom-module id="pilot-play">
+
+  <template>
+    <style>
+    </style>
+    <video
+    	id="video"
+      src="{{video}}"
+      controls
+      autoplay
+    ></video>
+  </template>
+
+  <script>
+    Polymer({
+      is: 'pilot-play',
+      properties: {
+      	video: String
+      },
+      ready: function() {
+      	this.$.video.addEventListener('loadedmetadata', function() {
+	      	var state = localStorage.getItem('pilot-play');
+	      	if (state) {
+	      		state = JSON.parse(state);
+	      		if (state.video == this.video) {
+	      			this.$.video.currentTime = state.currentTime - 5;
+	      		}
+	      	}
+      	}.bind(this));
+      	this.$.video.addEventListener('timeupdate', function() {
+	      	localStorage.setItem('pilot-play', JSON.stringify({
+	      		video: this.video,
+	      		currentTime: this.$.video.currentTime
+	      	}));
+      	}.bind(this));
+      }
+    });
+  </script>
+
+</dom-module>

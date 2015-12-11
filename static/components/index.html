@@ -1,0 +1,31 @@
+<dom-module id="pilot-index">
+
+  <script src="/static/deps/api.js"></script>
+
+  <template>
+    <style>
+    </style>
+    <template is="dom-repeat" items="{{files}}" as="file">
+      <a href="{{file.link}}">{{file.name}}</p>
+    </template>
+  </template>
+
+  <script>
+    Polymer({
+      is: 'pilot-index',
+      ready: function() {
+      	this.files = [];
+        api.ListFiles(function(resp) {
+          if (!resp.Files) { return }
+          this.set('files', resp.Files.map(function(file) {
+            return {
+              link: '#!/play' + file,
+              name: file
+            };
+          }));
+        }.bind(this));
+      }
+    });
+  </script>
+
+</dom-module>
