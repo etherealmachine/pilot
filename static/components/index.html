@@ -15,7 +15,7 @@
       is: 'pilot-index',
       ready: function() {
       	this.files = [];
-        api.ListFiles(function(resp) {
+        api.Call('ListFiles', {}, function(resp) {
           if (!resp.Files) { return }
           this.set('files', resp.Files.map(function(file) {
             return {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/etherealmachine/pilot/tv"
 	"github.com/gorilla/rpc"
 	"github.com/gorilla/rpc/json"
 	"github.com/gorilla/securecookie"
@@ -35,10 +36,6 @@ var (
 		".3gp":  true,
 	}
 )
-
-type Service struct {
-	Files []string
-}
 
 func (s *Service) walk(path string, _ os.FileInfo, _ error) error {
 	if video[filepath.Ext(path)] {
@@ -74,18 +71,6 @@ func authWrap(f http.HandlerFunc) http.HandlerFunc {
 		}
 		f(w, r)
 	}
-}
-
-type ListFilesRequest struct {
-}
-
-type ListFilesResponse struct {
-	Files []string
-}
-
-func (s *Service) ListFiles(r *http.Request, req *ListFilesRequest, resp *ListFilesResponse) error {
-	resp.Files = s.Files
-	return nil
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -151,14 +136,16 @@ func main() {
 		securecookie.GenerateRandomKey(64),
 		securecookie.GenerateRandomKey(32))
 
-	svc := new(Service)
+	svc := &Service{
+		TV: tv.New(),
+	}
 	go filepath.Walk(*root, svc.walk)
-	server := rpc.NewServer()
-	server.RegisterCodec(json.NewCodec(), "application/json")
-	server.RegisterService(svc, "Pilot")
+	rpcserver := rpc.NewServer()
+	rpcserver.RegisterCodec(json.NewCodec(), "application/json")
+	rpcserver.RegisterService(svc, "Pilot")
 
 	http.HandleFunc("/login", handleLogin)
-	http.HandleFunc("/rpc", authWrap(server.ServeHTTP))
+	http.HandleFunc("/rpc", authWrap(rpcserver.ServeHTTP))
 	http.HandleFunc("/null", emptyHandler)
 	http.HandleFunc("/undefined", emptyHandler)
 	http.HandleFunc("/", handleRoot)

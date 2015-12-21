@@ -27,8 +27,8 @@ function call(method, req, callback) {
   });
 }
 
-api.ListFiles = function(callback) {
-	call('Pilot.ListFiles', {}, callback);
+api.Call = function(method, req, callback) {
+	call('Pilot.' + method, req, callback);
 };
 
 })(api);

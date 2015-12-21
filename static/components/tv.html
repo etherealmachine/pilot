@@ -1,0 +1,44 @@
+<dom-module id="pilot-tv">
+
+  <script src="/static/deps/api.js"></script>
+
+  <template>
+    <style>
+    </style>
+    <template is="dom-if" if="!tv.On">
+      <button>On</button>
+    </template>
+    <button on-click="play">Play</button>
+    <button on-click="pause">Pause</button>
+    <button on-click="stop">Stop</button>
+    <p>Now playing: <span>{{tv.Playing}}</span></p>
+  </template>
+
+  <script>
+    Polymer({
+      is: 'pilot-tv',
+      ready: function() {
+      	this.tv = null;
+        api.Call('TVStatus', {}, function(resp) {
+          this.set('tv', resp.TV);
+        }.bind(this));
+      },
+      play: function() {
+        api.Call('Play', {Filename: 'content/sample1.mp4'}, function(resp) {
+          this.set('tv', resp.TV);
+        }.bind(this));
+      },
+      pause: function() {
+        api.Call('Pause', {}, function(resp) {
+          this.set('tv', resp.TV);
+        }.bind(this));
+      },
+      stop: function() {
+        api.Call('Stop', {}, function(resp) {
+          this.set('tv', resp.TV);
+        }.bind(this));
+      }
+    });
+  </script>
+
+</dom-module>
