@@ -19,7 +19,7 @@
           if (!resp.Files) { return }
           this.set('files', resp.Files.map(function(file) {
             return {
-              link: '#!/play' + file,
+              link: '#!/play/' + file,
               name: file
             };
           }));
