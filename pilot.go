@@ -13,36 +13,20 @@ import (
 	"github.com/gorilla/rpc"
 	"github.com/gorilla/rpc/json"
 	"github.com/gorilla/securecookie"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
 	root     = flag.String("root", ".", "Root folder to serve media from.")
+	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
 	addr     = flag.String("addr", ":80", "Address to serve from.")
 	build    = flag.Bool("build", false, "Build html file.")
 	fromFS   = flag.Bool("fromfs", false, "Serve static content from the filesystem.")
 	password = flag.String("password", "", "Login password.")
+	logfile  = flag.String("logfile", "", "Location to write logs to. If empty, logs to stdout.")
 
 	bakery *securecookie.SecureCookie
-	video  = map[string]bool{
-		".mp4":  true,
-		".avi":  true,
-		".mpg":  true,
-		".mov":  true,
-		".wmv":  true,
-		".mkv":  true,
-		".m4v":  true,
-		".webm": true,
-		".flv":  true,
-		".3gp":  true,
-	}
 )
-
-func (s *Service) walk(path string, _ os.FileInfo, _ error) error {
-	if video[filepath.Ext(path)] {
-		s.Files = append(s.Files, filepath.Clean(strings.TrimPrefix(path, *root)))
-	}
-	return nil
-}
 
 type LoginCookie struct {
 	LoginTime time.Time
@@ -71,6 +55,19 @@ func authWrap(f http.HandlerFunc) http.HandlerFunc {
 		}
 		f(w, r)
 	}
+}
+
+func logRequests(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println(
+			r.Host,
+			r.RemoteAddr,
+			r.Method,
+			r.URL,
+			r.Proto,
+			r.Header.Get("User-Agent"))
+		handler.ServeHTTP(w, r)
+	})
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -122,8 +119,53 @@ func emptyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+var video = map[string]bool{
+	".mp4":  true,
+	".avi":  true,
+	".mpg":  true,
+	".mov":  true,
+	".wmv":  true,
+	".mkv":  true,
+	".m4v":  true,
+	".webm": true,
+	".flv":  true,
+	".3gp":  true,
+}
+
+func (s *Service) walk(path string, info os.FileInfo, _ error) error {
+	if info.IsDir() {
+		inFolder := path == *root
+		for _, folder := range strings.Split(*folders, ",") {
+			if strings.HasPrefix(path, filepath.Join(*root, folder)) {
+				inFolder = true
+				break
+			}
+		}
+		if !inFolder {
+			return filepath.SkipDir
+		}
+	}
+	if video[filepath.Ext(path)] {
+		relPath, err := filepath.Rel(*root, path)
+		if err != nil {
+			log.Printf("error scanning files: %v", err)
+			return err
+		}
+		s.Files = append(s.Files, relPath)
+	}
+	return nil
+}
+
 func main() {
 	flag.Parse()
+
+	if *logfile != "" {
+		log.SetOutput(&lumberjack.Logger{
+			Filename: *logfile,
+			MaxSize:  50, // megabytes
+			MaxAge:   30, //days
+		})
+	}
 
 	if *build {
 		if err := buildStatic(); err != nil {
@@ -139,7 +181,9 @@ func main() {
 	svc := &Service{
 		TV: tv.New(),
 	}
-	go filepath.Walk(*root, svc.walk)
+	filepath.Walk(*root, svc.walk)
+	log.Printf("found %d files", len(svc.Files))
+
 	rpcserver := rpc.NewServer()
 	rpcserver.RegisterCodec(json.NewCodec(), "application/json")
 	rpcserver.RegisterService(svc, "Pilot")
@@ -150,5 +194,5 @@ func main() {
 	http.HandleFunc("/undefined", emptyHandler)
 	http.HandleFunc("/", handleRoot)
 	log.Printf("Server listening at %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(http.ListenAndServe(*addr, logRequests(http.DefaultServeMux)))
 }

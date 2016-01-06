@@ -7,8 +7,6 @@ import (
 	"os/exec"
 )
 
-const playerCommand = "/Users/james/Desktop/MPlayerX.app/Contents/MacOS/MPlayerX"
-
 type TV struct {
 	On       bool
 	Playing  string
@@ -92,7 +90,7 @@ func (tv *TV) TurnOff() {
 
 func (tv *TV) Play(filename string) error {
 	if tv.player == nil {
-		tv.player = exec.Command(playerCommand, filename)
+		tv.player = exec.Command("omxplayer", filename)
 		tv.logCmd(tv.player)
 		if in, err := tv.player.StdinPipe(); err != nil {
 			return err

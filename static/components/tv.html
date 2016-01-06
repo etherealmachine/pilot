@@ -17,16 +17,20 @@
   <script>
     Polymer({
       is: 'pilot-tv',
+      properties: {
+        video: String
+      },
       ready: function() {
       	this.tv = null;
         api.Call('TVStatus', {}, function(resp) {
           this.set('tv', resp.TV);
         }.bind(this));
-      },
-      play: function() {
-        api.Call('Play', {Filename: 'content/sample1.mp4'}, function(resp) {
+        api.Call('Play', {Filename: this.video}, function(resp) {
           this.set('tv', resp.TV);
         }.bind(this));
+      },
+      play: function() {
+
       },
       pause: function() {
         api.Call('Pause', {}, function(resp) {

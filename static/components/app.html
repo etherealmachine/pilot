@@ -13,9 +13,6 @@
       style$="{{curr(page, 'play')}}"
       video="{{page.params.video}}">
     </pilot-play>
-    <pilot-tv
-      style$="{{curr(page, 'tv')}}">
-    </pilot-tv>
   </template>
 
   <script>
@@ -24,7 +21,6 @@
       ready: function() {
         this.page = null;
         page('/', this.index.bind(this));
-        page('/tv', this.tv.bind(this));
         page('/play/:video(.*)', this.play.bind(this));
         page.base('/#!');
         page();
@@ -40,11 +36,6 @@
           params: {
             video: ctx.params.video
           }
-        });
-      },
-      tv: function(ctx, next) {
-        this.set('page', {
-          name: 'tv'
         });
       },
       curr: function(page, name) {
