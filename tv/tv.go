@@ -2,22 +2,34 @@ package tv
 
 import (
 	"bufio"
+	"flag"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+var (
+	player = flag.String("player", "omxplayer", "Video player binary.")
 )
 
 type TV struct {
 	On       bool
 	Playing  string
+	root     string
 	player   *exec.Cmd
 	playerIn io.WriteCloser
 	cmdout   []string
 	cmderr   []string
 }
 
-func New() *TV {
-	return &TV{}
+func New(root string) *TV {
+	return &TV{
+		root: root,
+	}
 }
 
 func (tv *TV) logCmd(cmd *exec.Cmd) {
@@ -66,31 +78,33 @@ func (tv *TV) sendCEC(command string) error {
 	return cec.Wait()
 }
 
-func (tv *TV) TurnOn() {
+func (tv *TV) TurnOn() error {
 	if tv.On {
-		return
+		return nil
 	}
 	if err := tv.sendCEC("on 0"); err != nil {
-		log.Println(err)
+		return err
 	} else {
 		tv.On = true
 	}
+	return nil
 }
 
-func (tv *TV) TurnOff() {
+func (tv *TV) TurnOff() error {
 	if !tv.On {
-		return
+		return nil
 	}
 	if err := tv.sendCEC("standby 0"); err != nil {
-		log.Println(err)
+		return err
 	} else {
 		tv.On = false
 	}
+	return nil
 }
 
 func (tv *TV) Play(filename string) error {
 	if tv.player == nil {
-		tv.player = exec.Command("omxplayer", filename)
+		tv.player = exec.Command(*player, filepath.Join(tv.root, filename))
 		tv.logCmd(tv.player)
 		if in, err := tv.player.StdinPipe(); err != nil {
 			return err
@@ -100,6 +114,8 @@ func (tv *TV) Play(filename string) error {
 		if err := tv.player.Start(); err != nil {
 			return err
 		}
+	} else {
+		return tv.Stop()
 	}
 	tv.Playing = filename
 	return nil
@@ -107,19 +123,57 @@ func (tv *TV) Play(filename string) error {
 
 func (tv *TV) Pause() error {
 	if tv.player == nil {
-		return nil
+		log.Println("attempt to pause a non-running player")
 	}
-	return exec.Command("xdotool", "key", "KP_Space").Run()
+	return dbusSend("int32:16")
 }
 
 func (tv *TV) Stop() error {
 	if tv.player == nil {
+		log.Println("attempt to stop a non-running player")
 		return nil
 	}
-	if err := tv.player.Process.Kill(); err != nil {
-		return err
+	err := dbusSend("int32:15")
+	if err != nil {
+		log.Println(err)
+	}
+	err = tv.player.Process.Kill()
+	if err != nil {
+		log.Println(err)
+	}
+	err = tv.player.Wait()
+	if err != nil {
+		log.Println(err)
 	}
 	tv.player = nil
 	tv.Playing = ""
+	return nil
+}
+
+func dbusSend(action string) error {
+	addr, err := ioutil.ReadFile("/tmp/omxplayerdbus.root")
+	if err != nil {
+		return err
+	}
+	pid, err := ioutil.ReadFile("/tmp/omxplayerdbus.root.pid")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(
+		"dbus-send",
+		"--print-reply=literal",
+		"--session",
+		"--dest=org.mpris.MediaPlayer2.omxplayer",
+		"/org/mpris/MediaPlayer2",
+		"org.mpris.MediaPlayer2.Player.Action",
+		action)
+	cmd.Env = []string{
+		"DBUS_SESSION_BUS_ADDRESS=" + strings.TrimSpace(string(addr)),
+		"DBUS_SESSION_BUS_PID=" + strings.TrimSpace(string(pid)),
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, out)
+	}
 	return nil
 }

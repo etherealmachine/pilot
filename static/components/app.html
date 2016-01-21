@@ -6,13 +6,15 @@
   <script src="/static/deps/page.js"></script>
 
   <template>
-    <pilot-index
-      style$="{{curr(page, 'index')}}">
-    </pilot-index>
-    <pilot-play
-      style$="{{curr(page, 'play')}}"
-      video="{{page.params.video}}">
-    </pilot-play>
+    <template is="dom-if" if="{{curr(page, 'index')}}">
+      <pilot-index></pilot-index>
+    </template>
+    <template is="dom-if" if="{{curr(page, 'play')}}">
+    <pilot-play video="{{page.params.video}}"></pilot-play>
+    </template>
+    <template is="dom-if" if="{{curr(page, 'tv')}}">
+      <pilot-tv video="{{page.params.video}}">></pilot-tv>
+    </template>
   </template>
 
   <script>
@@ -22,6 +24,7 @@
         this.page = null;
         page('/', this.index.bind(this));
         page('/play/:video(.*)', this.play.bind(this));
+        page('/tv/:video(.*)', this.tv.bind(this));
         page.base('/#!');
         page();
       },
@@ -38,11 +41,16 @@
           }
         });
       },
+      tv: function(ctx, next) {
+        this.set('page', {
+          name: 'tv',
+          params: {
+            video: ctx.params.video
+          }
+        });
+      },
       curr: function(page, name) {
-        if (page && page.name == name) {
-          return '';
-        }
-        return 'display: none';
+        return page && page.name == name;
       }
     });
   </script>

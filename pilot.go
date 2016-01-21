@@ -7,12 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/etherealmachine/pilot/tv"
 	"github.com/gorilla/rpc"
 	"github.com/gorilla/rpc/json"
-	"github.com/gorilla/securecookie"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -24,38 +22,7 @@ var (
 	fromFS   = flag.Bool("fromfs", false, "Serve static content from the filesystem.")
 	password = flag.String("password", "", "Login password.")
 	logfile  = flag.String("logfile", "", "Location to write logs to. If empty, logs to stdout.")
-
-	bakery *securecookie.SecureCookie
 )
-
-type LoginCookie struct {
-	LoginTime time.Time
-}
-
-func getLoginCookie(r *http.Request) (*LoginCookie, bool) {
-	if *password == "" {
-		return &LoginCookie{}, true
-	}
-	cookie, err := r.Cookie("login")
-	if err != nil {
-		return nil, false
-	}
-	loginCookie := new(LoginCookie)
-	if err = bakery.Decode("login", cookie.Value, loginCookie); err != nil {
-		return nil, false
-	}
-	return loginCookie, true
-}
-
-func authWrap(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := getLoginCookie(r); !ok {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		f(w, r)
-	}
-}
 
 func logRequests(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,45 +37,23 @@ func logRequests(handler http.Handler) http.Handler {
 	})
 }
 
-func handleLogin(w http.ResponseWriter, r *http.Request) {
-	pass := r.FormValue("password")
-	if pass != *password {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	encoded, err := bakery.Encode("login", &LoginCookie{LoginTime: time.Now()})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:  "login",
-		Value: encoded,
-		Path:  "/",
-	})
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-}
-
 func handleRoot(w http.ResponseWriter, r *http.Request) {
+	if _, ok := getLoginCookie(r); !ok {
+		loginRedirect(w, r)
+		return
+	}
 	var filename string
 	if r.URL.Path == "/" {
-		if _, ok := getLoginCookie(r); !ok {
-			filename = filepath.Join("static", "login.html")
-		} else {
-			filename = filepath.Join("static", "index.html")
-		}
+		filename = filepath.Join("static", "index.html")
 	} else {
 		filename = r.URL.Path[1:]
 	}
-	if *fromFS {
-		if _, err := os.Stat(filename); os.IsNotExist(err) {
-			filename = filepath.Join(*root, r.URL.Path)
-		}
-		http.ServeFile(w, r, filename)
-		return
-	} else if contents := static[filename]; contents != "" {
+	if contents := static[filename]; contents != "" {
 		w.Write([]byte(contents))
+		return
+	}
+	if *fromFS && strings.HasPrefix(filename, "static") {
+		http.ServeFile(w, r, filename)
 		return
 	}
 	filename = filepath.Join(*root, filename)
@@ -174,12 +119,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	bakery = securecookie.New(
-		securecookie.GenerateRandomKey(64),
-		securecookie.GenerateRandomKey(32))
-
 	svc := &Service{
-		TV: tv.New(),
+		TV: tv.New(*root),
 	}
 	filepath.Walk(*root, svc.walk)
 	log.Printf("found %d files", len(svc.Files))

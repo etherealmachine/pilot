@@ -6,7 +6,7 @@
     <style>
     </style>
     <template is="dom-if" if="!tv.On">
-      <button>On</button>
+      <button on-click="on">On</button>
     </template>
     <button on-click="play">Play</button>
     <button on-click="pause">Pause</button>
@@ -24,13 +24,22 @@
       	this.tv = null;
         api.Call('TVStatus', {}, function(resp) {
           this.set('tv', resp.TV);
+          if (this.tv.Playing != '') {
+            this.video = this.tv.Playing;
+          }
         }.bind(this));
-        api.Call('Play', {Filename: this.video}, function(resp) {
+      },
+      on: function() {
+        api.Call('TurnOn', {}, function(resp) {
           this.set('tv', resp.TV);
         }.bind(this));
       },
       play: function() {
-
+        api.Call('Play', {
+          Filename: this.video
+        }, function(resp) {
+          this.set('tv', resp.TV);
+        }.bind(this));
       },
       pause: function() {
         api.Call('Pause', {}, function(resp) {

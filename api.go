@@ -35,6 +35,19 @@ func (s *Service) TVStatus(r *http.Request, req *TVStatusRequest, resp *TVStatus
 	return nil
 }
 
+type TurnOnRequest struct {
+}
+
+type TurnOnResponse struct {
+	TV *tv.TV
+}
+
+func (s *Service) TurnOn(r *http.Request, req *PlayRequest, resp *PlayResponse) error {
+	err := s.TV.TurnOn()
+	resp.TV = s.TV
+	return err
+}
+
 type PlayRequest struct {
 	Filename string
 }
