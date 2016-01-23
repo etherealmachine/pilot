@@ -5,12 +5,25 @@
   <template>
     <style>
     </style>
-    <template is="dom-if" if="!tv.On">
-      <button on-click="on">On</button>
-    </template>
-    <button on-click="play">Play</button>
-    <button on-click="pause">Pause</button>
-    <button on-click="stop">Stop</button>
+    <button
+      on-click="play"
+      class="btn btn-success"
+      disabled$="{{isPlaying(tv)}}">
+      <span class="glyphicon glyphicon-play"></span>
+    </button>
+    <button
+      on-click="pause"
+      class="btn"
+      disabled$="{{isPaused(tv)}}">
+      <span class="glyphicon glyphicon-pause"></span>
+    </button>
+    <button
+      on-click="stop"
+      class="btn btn-danger"
+      disabled$="{{isStopped(tv)}}">
+      <span class="glyphicon glyphicon-stop"></span>
+    </button>
+
     <p>Now playing: <span>{{tv.Playing}}</span></p>
   </template>
 
@@ -18,25 +31,23 @@
     Polymer({
       is: 'pilot-tv',
       properties: {
-        video: String
+        file: String
       },
       ready: function() {
-      	this.tv = null;
+      	this.tv = {
+          Playing: '',
+          Paused: false
+        };
         api.Call('TVStatus', {}, function(resp) {
           this.set('tv', resp.TV);
           if (this.tv.Playing != '') {
-            this.video = this.tv.Playing;
+            this.file = this.tv.Playing;
           }
-        }.bind(this));
-      },
-      on: function() {
-        api.Call('TurnOn', {}, function(resp) {
-          this.set('tv', resp.TV);
         }.bind(this));
       },
       play: function() {
         api.Call('Play', {
-          Filename: this.video
+          Filename: this.file
         }, function(resp) {
           this.set('tv', resp.TV);
         }.bind(this));
@@ -50,6 +61,15 @@
         api.Call('Stop', {}, function(resp) {
           this.set('tv', resp.TV);
         }.bind(this));
+      },
+      isPlaying: function(tv) {
+        return tv.Playing != '' && !tv.Paused;
+      },
+      isPaused: function(tv) {
+        return tv.Playing == '' || tv.Paused;
+      },
+      isStopped: function(tv) {
+        return tv.Playing == '';
       }
     });
   </script>

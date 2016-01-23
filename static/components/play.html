@@ -5,9 +5,8 @@
     </style>
     <video
     	id="video"
-      src="{{video}}"
+      src="{{file}}"
       controls
-      autoplay
     ></video>
   </template>
 
@@ -15,21 +14,21 @@
     Polymer({
       is: 'pilot-play',
       properties: {
-      	video: String
+      	file: String
       },
       ready: function() {
       	this.$.video.addEventListener('loadedmetadata', function() {
 	      	var state = localStorage.getItem('pilot-play');
 	      	if (state) {
 	      		state = JSON.parse(state);
-	      		if (state.video == this.video) {
+	      		if (state.file == this.file) {
 	      			this.$.video.currentTime = state.currentTime - 5;
 	      		}
 	      	}
       	}.bind(this));
       	this.$.video.addEventListener('timeupdate', function() {
 	      	localStorage.setItem('pilot-play', JSON.stringify({
-	      		video: this.video,
+	      		file: this.file,
 	      		currentTime: this.$.video.currentTime
 	      	}));
       	}.bind(this));

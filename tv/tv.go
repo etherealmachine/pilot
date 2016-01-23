@@ -17,8 +17,8 @@ var (
 )
 
 type TV struct {
-	On       bool
 	Playing  string
+	Paused   bool
 	root     string
 	player   *exec.Cmd
 	playerIn io.WriteCloser
@@ -78,54 +78,46 @@ func (tv *TV) sendCEC(command string) error {
 	return cec.Wait()
 }
 
-func (tv *TV) TurnOn() error {
-	if tv.On {
-		return nil
-	}
-	if err := tv.sendCEC("on 0"); err != nil {
-		return err
-	} else {
-		tv.On = true
-	}
-	return nil
-}
-
-func (tv *TV) TurnOff() error {
-	if !tv.On {
-		return nil
-	}
-	if err := tv.sendCEC("standby 0"); err != nil {
-		return err
-	} else {
-		tv.On = false
-	}
-	return nil
-}
-
 func (tv *TV) Play(filename string) error {
-	if tv.player == nil {
-		tv.player = exec.Command(*player, filepath.Join(tv.root, filename))
-		tv.logCmd(tv.player)
-		if in, err := tv.player.StdinPipe(); err != nil {
-			return err
-		} else {
-			tv.playerIn = in
-		}
-		if err := tv.player.Start(); err != nil {
+	if tv.Paused {
+		if err := dbusSend("int32:16"); err != nil {
 			return err
 		}
+		tv.Paused = false
+		return nil
+	} else if tv.Playing != "" {
+		log.Println("attempt to play on a running player")
+		return nil
+	}
+	tv.player = exec.Command(*player, filepath.Join(tv.root, filename))
+	tv.logCmd(tv.player)
+	if in, err := tv.player.StdinPipe(); err != nil {
+		return err
 	} else {
-		return tv.Stop()
+		tv.playerIn = in
+	}
+	if err := tv.player.Start(); err != nil {
+		return err
 	}
 	tv.Playing = filename
+	tv.Paused = false
 	return nil
 }
 
 func (tv *TV) Pause() error {
 	if tv.player == nil {
 		log.Println("attempt to pause a non-running player")
+		return nil
 	}
-	return dbusSend("int32:16")
+	if tv.Paused {
+		log.Println("attempt to pause a paused player")
+		return nil
+	}
+	if err := dbusSend("int32:16"); err != nil {
+		return err
+	}
+	tv.Paused = true
+	return nil
 }
 
 func (tv *TV) Stop() error {
@@ -147,6 +139,7 @@ func (tv *TV) Stop() error {
 	}
 	tv.player = nil
 	tv.Playing = ""
+	tv.Paused = false
 	return nil
 }
 

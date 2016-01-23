@@ -1,12 +1,44 @@
+<link rel="import" href="/static/deps/bootstrap.html">
+
 <dom-module id="pilot-index">
 
   <script src="/static/deps/api.js"></script>
 
+  <style>
+    button.search {
+      margin-left: -5px;
+      border-top-left-radius: 0px;
+      border-bottom-left-radius: 0px;
+    }
+    input.search {
+      width: 80%;
+      border-top-right-radius: 0px;
+      border-bottom-right-radius: 0px;
+    }
+  </style>
+
   <template>
     <style>
     </style>
-    <template is="dom-repeat" items="{{files}}" as="file">
-      <a href="{{file.link}}">{{file.name}}</p>
+    <div class="row">
+      <form class="col-md-3 form-inline">
+        <input
+          value="{{query::input}}"
+          class="form-control search"
+          type="text">
+        <button class="btn btn-primary search" on-click="searchClicked">
+          <span class="glyphicon glyphicon-search"></span>
+        </button>
+      </form>
+    </div>
+    <template
+      is="dom-repeat"
+      items="{{files}}"
+      as="file"
+      filter="{{filter(query)}}">
+      <p>
+        <a href="{{file.link}}">{{file.name}}</a>
+      </p>
     </template>
   </template>
 
@@ -19,11 +51,22 @@
           if (!resp.Files) { return }
           this.set('files', resp.Files.map(function(file) {
             return {
-              link: '#!/play/' + file,
+              link: '#!/file/' + file,
               name: file
             };
           }));
         }.bind(this));
+      },
+      filter: function(query) {
+        if (!query) {
+          return null;
+        }
+        return function(file) {
+          return file.name.toLowerCase().indexOf(query.toLowerCase()) != -1;
+        }
+      },
+      searchClicked: function(event) {
+        event.preventDefault();
       }
     });
   </script>

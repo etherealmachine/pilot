@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/etherealmachine/pilot/tv"
 	"github.com/gorilla/rpc"
@@ -15,13 +17,14 @@ import (
 )
 
 var (
-	root     = flag.String("root", ".", "Root folder to serve media from.")
-	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
-	addr     = flag.String("addr", ":80", "Address to serve from.")
-	build    = flag.Bool("build", false, "Build html file.")
-	fromFS   = flag.Bool("fromfs", false, "Serve static content from the filesystem.")
-	password = flag.String("password", "", "Login password.")
-	logfile  = flag.String("logfile", "", "Location to write logs to. If empty, logs to stdout.")
+	root        = flag.String("root", ".", "Root folder to serve media from.")
+	folders     = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
+	addr        = flag.String("addr", ":80", "Address to serve from.")
+	build       = flag.Bool("build", false, "Build html file.")
+	fromFS      = flag.Bool("fromfs", false, "Serve static content from the filesystem.")
+	password    = flag.String("password", "", "Login password.")
+	logfile     = flag.String("logfile", "", "Location to write logs to. If empty, logs to stdout.")
+	startupTime time.Time
 )
 
 func logRequests(handler http.Handler) http.Handler {
@@ -48,16 +51,33 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	} else {
 		filename = r.URL.Path[1:]
 	}
-	if contents := static[filename]; contents != "" {
-		w.Write([]byte(contents))
-		return
-	}
 	if *fromFS && strings.HasPrefix(filename, "static") {
 		http.ServeFile(w, r, filename)
 		return
 	}
-	filename = filepath.Join(*root, filename)
-	http.ServeFile(w, r, filename)
+	if contents := static[filename]; contents != "" {
+		http.ServeContent(w, r, filename, startupTime, bytes.NewReader([]byte(contents)))
+		return
+	}
+	f, err := os.Open(filepath.Join(*root, filename))
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Header().Add(
+		"Content-Disposition", "attachment;filename="+filepath.Base(filename))
+	http.ServeContent(w, r, filename, fi.ModTime(), f)
 }
 
 func emptyHandler(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +123,8 @@ func (s *Service) walk(path string, info os.FileInfo, _ error) error {
 
 func main() {
 	flag.Parse()
+
+	startupTime = time.Now()
 
 	if *logfile != "" {
 		log.SetOutput(&lumberjack.Logger{

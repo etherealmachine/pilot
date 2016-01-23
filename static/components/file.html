@@ -1,0 +1,31 @@
+<link rel="import" href="/static/deps/bootstrap.html">
+
+<dom-module id="pilot-file">
+
+  <template>
+  	<ul style="list-style:none">
+	  	<li><a href="{{playLink(file)}}">Play</a></li>
+	  	<li><a href="{{tvLink(file)}}">Play on TV</a></li>
+	  	<li><a href="{{downloadLink(file)}}">Download</a></li>
+  	</ul>
+  </template>
+
+  <script>
+    Polymer({
+      is: 'pilot-file',
+      properties: {
+      	file: String
+      },
+      playLink: function(file) {
+      	return '#!/play/' + file;
+      },
+      tvLink: function(file) {
+      	return '#!/tv/' + file;
+      },
+      downloadLink: function(file) {
+      	return file;
+      }
+    });
+  </script>
+
+</dom-module>

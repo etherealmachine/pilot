@@ -1,20 +1,28 @@
+<link rel="import" href="/static/deps/bootstrap.html">
 <link rel="import" href="/static/components/index.html">
+<link rel="import" href="/static/components/file.html">
 <link rel="import" href="/static/components/play.html">
 <link rel="import" href="/static/components/tv.html">
+
 <dom-module id="pilot-main">
 
   <script src="/static/deps/page.js"></script>
 
   <template>
-    <template is="dom-if" if="{{curr(page, 'index')}}">
-      <pilot-index></pilot-index>
-    </template>
-    <template is="dom-if" if="{{curr(page, 'play')}}">
-    <pilot-play video="{{page.params.video}}"></pilot-play>
-    </template>
-    <template is="dom-if" if="{{curr(page, 'tv')}}">
-      <pilot-tv video="{{page.params.video}}">></pilot-tv>
-    </template>
+    <div class="container-fluid">
+      <template is="dom-if" if="{{curr(page, 'index')}}">
+        <pilot-index></pilot-index>
+      </template>
+      <template is="dom-if" if="{{curr(page, 'file')}}">
+        <pilot-file file="{{page.params.file}}"></pilot-file>
+      </template>
+      <template is="dom-if" if="{{curr(page, 'play')}}" restamp>
+        <pilot-play file="{{page.params.file}}"></pilot-play>
+      </template>
+      <template is="dom-if" if="{{curr(page, 'tv')}}">
+        <pilot-tv file="{{page.params.file}}"></pilot-tv>
+      </template>
+    </div>
   </template>
 
   <script>
@@ -22,32 +30,20 @@
       is: 'pilot-main',
       ready: function() {
         this.page = null;
-        page('/', this.index.bind(this));
-        page('/play/:video(.*)', this.play.bind(this));
-        page('/tv/:video(.*)', this.tv.bind(this));
+        page('/', this.bindPage('index'));
+        page('/file/:file(.*)', this.bindPage('file'));
+        page('/play/:file(.*)', this.bindPage('play'));
+        page('/tv/:file(.*)', this.bindPage('tv'));
         page.base('/#!');
         page();
       },
-      index: function(ctx, next) {
-        this.set('page', {
-          name: 'index'
-        });
-      },
-      play: function(ctx, next) {
-        this.set('page', {
-          name: 'play',
-          params: {
-            video: ctx.params.video
-          }
-        });
-      },
-      tv: function(ctx, next) {
-        this.set('page', {
-          name: 'tv',
-          params: {
-            video: ctx.params.video
-          }
-        });
+      bindPage: function(pageName) {
+        return function(ctx, next) {
+          var page = {};
+          page.name = pageName;
+          page.params = ctx.params;
+          this.set('page', page);
+        }.bind(this);
       },
       curr: function(page, name) {
         return page && page.name == name;
