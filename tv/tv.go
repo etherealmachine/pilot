@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/etherealmachine/cec"
 )
 
 var (
@@ -27,9 +29,39 @@ type TV struct {
 }
 
 func New(root string) *TV {
-	return &TV{
+	conn, err := cec.Open("", "pilot")
+	if err != nil {
+		panic(err)
+	}
+	t := &TV{
 		root: root,
 	}
+	conn.On(cec.Pause, func() {
+		if t.Paused {
+			if err := t.Play(""); err != nil {
+				log.Println(err)
+			}
+		} else {
+			if err := t.Pause(); err != nil {
+				log.Println(err)
+			}
+		}
+	})
+	conn.On(cec.Play, func() {
+		if t.Paused {
+			if err := t.Play(""); err != nil {
+				log.Println(err)
+			}
+		}
+	})
+	conn.On(cec.Stop, func() {
+		if t.player != nil && t.Playing != "" {
+			if err := t.Stop(); err != nil {
+				log.Println(err)
+			}
+		}
+	})
+	return t
 }
 
 func (tv *TV) logCmd(cmd *exec.Cmd) {
@@ -61,21 +93,6 @@ func (tv *TV) logCmd(cmd *exec.Cmd) {
 			tv.cmderr = append(tv.cmderr, s.Err().Error())
 		}
 	}()
-}
-
-func (tv *TV) sendCEC(command string) error {
-	cec := exec.Command("cec-client", "-s")
-	tv.logCmd(cec)
-	if err := cec.Start(); err != nil {
-		return err
-	}
-	w, err := cec.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	w.Write([]byte(command))
-	return cec.Wait()
 }
 
 func (tv *TV) Play(filename string) error {
