@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -39,46 +39,13 @@ func getLoginCookie(r *http.Request) (*LoginCookie, bool) {
 	}
 	cookie, err := r.Cookie("login")
 	if err != nil {
+		log.Printf("no login cookie: %v", err)
 		return nil, false
 	}
 	loginCookie := new(LoginCookie)
 	if err = bakery.Decode("login", cookie.Value, loginCookie); err != nil {
+		log.Printf("error decoding login cookie: %v", err)
 		return nil, false
 	}
 	return loginCookie, true
-}
-
-func authWrap(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := getLoginCookie(r); !ok {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		f(w, r)
-	}
-}
-
-func loginRedirect(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, loginPage)
-	return
-}
-
-func handleLogin(w http.ResponseWriter, r *http.Request) {
-	pass := r.FormValue("password")
-	if pass != *password {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	encoded, err := bakery.Encode("login", &LoginCookie{LoginTime: time.Now()})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:  "login",
-		Value: encoded,
-		Path:  "/",
-	})
-	http.Redirect(w, r, r.FormValue("redirect_to"), http.StatusTemporaryRedirect)
 }
