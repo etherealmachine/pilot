@@ -121,7 +121,14 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/controls", http.StatusTemporaryRedirect)
 		return
 	}
-	fmt.Fprintln(w, "unimplemented")
+	t := s.T.Lookup("play.html")
+	if err := t.Execute(w, struct {
+		Src string
+	}{
+		Src: video,
+	}); err != nil {
+		log.Printf("error executing template: %v", err)
+	}
 }
 
 func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
