@@ -1,10 +1,8 @@
 package tv
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -19,22 +17,23 @@ var (
 )
 
 type TV struct {
-	Playing  string
-	Paused   bool
-	root     string
-	player   *exec.Cmd
-	playerIn io.WriteCloser
-	cmdout   []string
-	cmderr   []string
+	Playing string
+	Paused  bool
+	CECErr  error
+	root    string
+	player  *exec.Cmd
 }
 
+// New returns a new TV.
+//
 func New(root string) *TV {
-	conn, err := cec.Open("", "pilot")
-	if err != nil {
-		panic(err)
-	}
 	t := &TV{
 		root: root,
+	}
+	conn, err := cec.Open("", "pilot")
+	if err != nil {
+		t.CECErr = err
+		return t
 	}
 	conn.On(cec.Pause, func() {
 		if t.Paused {
@@ -64,37 +63,6 @@ func New(root string) *TV {
 	return t
 }
 
-func (tv *TV) logCmd(cmd *exec.Cmd) {
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	go func() {
-		s := bufio.NewScanner(stdout)
-		for ok := s.Scan(); ok; ok = s.Scan() {
-			tv.cmdout = append(tv.cmdout, s.Text())
-		}
-		if s.Err() != nil {
-			tv.cmderr = append(tv.cmderr, s.Err().Error())
-		}
-	}()
-	go func() {
-		s := bufio.NewScanner(stderr)
-		for ok := s.Scan(); ok; ok = s.Scan() {
-			tv.cmdout = append(tv.cmdout, s.Text())
-		}
-		if s.Err() != nil {
-			tv.cmderr = append(tv.cmderr, s.Err().Error())
-		}
-	}()
-}
-
 func (tv *TV) Play(filename string) error {
 	if tv.Paused {
 		if err := dbusSend("int32:16"); err != nil {
@@ -107,15 +75,12 @@ func (tv *TV) Play(filename string) error {
 		return nil
 	}
 	tv.player = exec.Command(*player, filepath.Join(tv.root, filename))
-	tv.logCmd(tv.player)
-	if in, err := tv.player.StdinPipe(); err != nil {
-		return err
-	} else {
-		tv.playerIn = in
-	}
-	if err := tv.player.Start(); err != nil {
-		return err
-	}
+	go func() {
+		out, err := tv.player.CombinedOutput()
+		if err != nil {
+			log.Printf("%v: %s", err, out)
+		}
+	}()
 	tv.Playing = filename
 	tv.Paused = false
 	return nil
