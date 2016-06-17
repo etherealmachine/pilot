@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/etherealmachine/pilot/tv"
+	"github.com/twinj/uuid"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -21,12 +22,14 @@ var (
 	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
 	addr     = flag.String("addr", ":80", "Address to serve from.")
 	password = flag.String("password", "", "Login password.")
-	logfile  = flag.String("logfile", "", "Location to write logs to. If empty, logs to stdout.")
+	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
+
+	httplog *log.Logger
 )
 
 func logRequests(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Println(
+		httplog.Println(
 			r.Host,
 			r.RemoteAddr,
 			r.Method,
@@ -66,33 +69,42 @@ type server struct {
 	Files []string
 	TV    *tv.TV
 	T     *template.Template
+	etag  string
 }
 
-func (s *server) walk(path string, info os.FileInfo, _ error) error {
-	if info.IsDir() {
-		inFolder := path == *root
-		for _, folder := range strings.Split(*folders, ",") {
-			if strings.HasPrefix(path, filepath.Join(*root, folder)) {
-				inFolder = true
-				break
+func walker(files *[]string) func(string, os.FileInfo, error) error {
+	return func(path string, info os.FileInfo, _ error) error {
+		if info.IsDir() {
+			inFolder := path == *root
+			for _, folder := range strings.Split(*folders, ",") {
+				if strings.HasPrefix(path, filepath.Join(*root, folder)) {
+					inFolder = true
+					break
+				}
+			}
+			if !inFolder {
+				return filepath.SkipDir
 			}
 		}
-		if !inFolder {
-			return filepath.SkipDir
+		if video[filepath.Ext(path)] {
+			relPath, err := filepath.Rel(*root, path)
+			if err != nil {
+				log.Printf("error scanning files: %v", err)
+				return err
+			}
+			*files = append(*files, relPath)
 		}
+		return nil
 	}
-	if video[filepath.Ext(path)] {
-		relPath, err := filepath.Rel(*root, path)
-		if err != nil {
-			log.Printf("error scanning files: %v", err)
-			return err
-		}
-		s.Files = append(s.Files, relPath)
-	}
-	return nil
 }
 
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Cache-Control", "public, max-age=31536000")
+	if r.Header.Get("If-None-Match") == s.etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Add("Etag", s.etag)
 	t := s.T.Lookup("index.html")
 	if err := t.Execute(w, s); err != nil {
 		log.Printf("error executing template: %v", err)
@@ -199,24 +211,34 @@ func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
-	s.Files = nil
-	filepath.Walk(*root, s.walk)
+	var files []string
+	filepath.Walk(*root, walker(&files))
+	s.Files = files
+	s.etag = uuid.NewV4().String()
 	fmt.Fprintf(w, "found %d files", len(s.Files))
 }
 
 func main() {
 	flag.Parse()
 
-	if *logfile != "" {
+	if *logdir != "" {
+		httplog = log.New(&lumberjack.Logger{
+			Filename: filepath.Join(*logdir, "httprequests.log"),
+			MaxSize:  50, // megabytes
+			MaxAge:   30, //days
+		}, "", log.Flags())
 		log.SetOutput(&lumberjack.Logger{
-			Filename: *logfile,
+			Filename: filepath.Join(*logdir, "output.log"),
 			MaxSize:  50, // megabytes
 			MaxAge:   30, //days
 		})
+	} else {
+		httplog = log.New(os.Stderr, "", log.Flags())
 	}
 
 	s := &server{
-		TV: tv.New(*root),
+		TV:   tv.New(*root),
+		etag: uuid.NewV4().String(),
 	}
 
 	var err error
@@ -227,7 +249,8 @@ func main() {
 		log.Fatalf("error parsing templates: %v", err)
 	}
 
-	filepath.Walk(*root, s.walk)
+	log.Println("pilot is up, looking for files to serve...")
+	filepath.Walk(*root, walker(&s.Files))
 	log.Printf("found %d files", len(s.Files))
 
 	http.HandleFunc("/login", s.LoginHandler)

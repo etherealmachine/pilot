@@ -1,5 +1,4 @@
 go run *.go \
 -addr :8080 \
--player /Users/james/Desktop/MPlayerX.app/Contents/MacOS/MPlayerX \
--root content \
+-root /mnt/media \
 -folders TV,Movies

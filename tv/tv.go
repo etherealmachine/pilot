@@ -65,6 +65,7 @@ func New(root string) *TV {
 }
 
 func (tv *TV) logCmd(cmd *exec.Cmd) {
+	log.Printf("cmd: %s %s", cmd.Path, strings.Join(cmd.Args, " "))
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Println(err)
