@@ -1,7 +1,6 @@
 package tv
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,31 +11,35 @@ import (
 	"github.com/etherealmachine/cec"
 )
 
-var (
-	player = flag.String("player", "omxplayer", "Video player binary.")
-)
+type TV interface {
+	Playing() string
+	Paused() bool
+	CECErr() error
+	Play(filename string) error
+	Pause() error
+	Stop() error
+}
 
-type TV struct {
-	Playing string
-	Paused  bool
-	CECErr  error
+type tv struct {
+	playing string
+	paused  bool
+	cecErr  error
 	root    string
 	player  *exec.Cmd
 }
 
 // New returns a new TV.
-//
-func New(root string) *TV {
-	t := &TV{
+func New(root string) TV {
+	t := &tv{
 		root: root,
 	}
 	conn, err := cec.Open("", "pilot")
 	if err != nil {
-		t.CECErr = err
+		t.cecErr = err
 		return t
 	}
 	conn.On(cec.Pause, func() {
-		if t.Paused {
+		if t.paused {
 			if err := t.Play(""); err != nil {
 				log.Println(err)
 			}
@@ -47,14 +50,14 @@ func New(root string) *TV {
 		}
 	})
 	conn.On(cec.Play, func() {
-		if t.Paused {
+		if t.paused {
 			if err := t.Play(""); err != nil {
 				log.Println(err)
 			}
 		}
 	})
 	conn.On(cec.Stop, func() {
-		if t.player != nil && t.Playing != "" {
+		if t.player != nil && t.playing != "" {
 			if err := t.Stop(); err != nil {
 				log.Println(err)
 			}
@@ -63,46 +66,58 @@ func New(root string) *TV {
 	return t
 }
 
-func (tv *TV) Play(filename string) error {
-	if tv.Paused {
+func (tv *tv) Playing() string {
+	return tv.playing
+}
+
+func (tv *tv) Paused() bool {
+	return tv.paused
+}
+
+func (tv *tv) CECErr() error {
+	return tv.cecErr
+}
+
+func (tv *tv) Play(filename string) error {
+	if tv.paused {
 		if err := dbusSend("int32:16"); err != nil {
 			return err
 		}
-		tv.Paused = false
+		tv.paused = false
 		return nil
-	} else if tv.Playing != "" {
+	} else if tv.playing != "" {
 		log.Println("attempt to play on a running player")
 		return nil
 	}
-	tv.player = exec.Command(*player, filepath.Join(tv.root, filename))
+	tv.player = exec.Command("omxplayer", filepath.Join(tv.root, filename))
 	go func() {
 		out, err := tv.player.CombinedOutput()
 		if err != nil {
 			log.Printf("%v: %s", err, out)
 		}
 	}()
-	tv.Playing = filename
-	tv.Paused = false
+	tv.playing = filename
+	tv.paused = false
 	return nil
 }
 
-func (tv *TV) Pause() error {
+func (tv *tv) Pause() error {
 	if tv.player == nil {
 		log.Println("attempt to pause a non-running player")
 		return nil
 	}
-	if tv.Paused {
+	if tv.paused {
 		log.Println("attempt to pause a paused player")
 		return nil
 	}
 	if err := dbusSend("int32:16"); err != nil {
 		return err
 	}
-	tv.Paused = true
+	tv.paused = true
 	return nil
 }
 
-func (tv *TV) Stop() error {
+func (tv *tv) Stop() error {
 	if tv.player == nil {
 		log.Println("attempt to stop a non-running player")
 		return nil
@@ -120,8 +135,8 @@ func (tv *TV) Stop() error {
 		log.Println(err)
 	}
 	tv.player = nil
-	tv.Playing = ""
-	tv.Paused = false
+	tv.playing = ""
+	tv.paused = false
 	return nil
 }
 

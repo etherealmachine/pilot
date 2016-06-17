@@ -16,19 +16,6 @@ func init() {
 		securecookie.GenerateRandomKey(32))
 }
 
-const loginPage = `<!doctype html>
-<html>
-	<head>
-		<title>pilot</title>
-	</head>
-	<body>
-		<form action="/login" method="post">
-      <input id="password" type="password" name="password" placeholder="password">
-      <button type="submit">Login</button>
-    </form>
-	</body>
-</html>`
-
 type LoginCookie struct {
 	LoginTime time.Time
 }

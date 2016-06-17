@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+	<head>
+		<title>pilot</title>
+		<link
+				rel="stylesheet"
+				href="https://fonts.googleapis.com/icon?family=Material+Icons">
+		<style>{{ .CSS }}</style>
+		<style>
+			.brand-logo {
+				margin-left: 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<nav>
+	    <div class="nav-wrapper blue">
+	      <a href="#" class="brand-logo">Pilot</a>
+	      <ul id="nav-mobile" class="right hide-on-med-and-down">
+	      	{{ if ne .TV.Playing "" }}
+	        <li>Now Playing: {{ .TV.Playing }}</li>
+	        <li>
+	        	<a href="/controls?action=stop">
+	        		<i class="material-icons">stop</i>
+	        	</a>
+	        </li>
+	       	{{ if .TV.Paused }}
+	        <li>
+	        	<a href="/controls?action=resume">
+	        		<i class="material-icons">play_arrow</i>
+	        	</a>
+	        </li>
+	       	{{ else if not .TV.Paused }}
+	        <li>
+	        	<a href="/controls?action=pause">
+	        		<i class="material-icons">pause</i>
+	        	</a>
+	        </li>
+	       	{{ end }}
+	      	{{ end }}
+	      </ul>
+	    </div>
+	  </nav>
+		<div class="container">
+			{{ range .Files }}
+			<p>
+				{{ . }}
+				<br>
+				<a href="/play?video={{ urlencode . }}&tv=true">
+					Play on TV
+				</a>
+				<br>
+				<a href="/play?video={{ urlencode . }}">
+					Play in Browser
+				</a>
+				<br>
+				<a href="/download?video={{ urlencode . }}">
+					Download
+				</a>
+				<br>
+			</p>
+			{{ end }}
+		</div>
+	</body>
+</html>

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/etherealmachine/pilot/tv"
-	"github.com/twinj/uuid"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -23,6 +23,7 @@ var (
 	addr     = flag.String("addr", ":80", "Address to serve from.")
 	password = flag.String("password", "", "Login password.")
 	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
+	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
 
 	httplog *log.Logger
 )
@@ -36,18 +37,6 @@ func logRequests(handler http.Handler) http.Handler {
 			r.URL,
 			r.Proto,
 			r.Header.Get("User-Agent"))
-		handler.ServeHTTP(w, r)
-	})
-}
-
-func authRequests(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/login" {
-			if _, ok := getLoginCookie(r); !ok {
-				fmt.Fprint(w, loginPage)
-				return
-			}
-		}
 		handler.ServeHTTP(w, r)
 	})
 }
@@ -67,9 +56,9 @@ var video = map[string]bool{
 
 type server struct {
 	Files []string
-	TV    *tv.TV
+	TV    tv.TV
 	T     *template.Template
-	etag  string
+	CSS   template.CSS
 }
 
 func walker(files *[]string) func(string, os.FileInfo, error) error {
@@ -98,13 +87,24 @@ func walker(files *[]string) func(string, os.FileInfo, error) error {
 	}
 }
 
+func (s *server) authenticate(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/login" {
+			if _, ok := getLoginCookie(r); !ok {
+				t := s.T.Lookup("login.html")
+				if err := t.Execute(w, &struct{RedirectTo string}{
+					RedirectTo: r.URL.Path
+				}); err != nil {
+					log.Println(err)
+				}
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Cache-Control", "public, max-age=31536000")
-	if r.Header.Get("If-None-Match") == s.etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.Header().Add("Etag", s.etag)
 	t := s.T.Lookup("index.html")
 	if err := t.Execute(w, s); err != nil {
 		log.Printf("error executing template: %v", err)
@@ -146,9 +146,9 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 	action := r.FormValue("action")
 	switch {
-	case action == "resume" && s.TV.Playing != "" && s.TV.Paused:
-		s.TV.Play(s.TV.Playing)
-	case action == "pause" && s.TV.Playing != "" && !s.TV.Paused:
+	case action == "resume" && s.TV.Playing() != "" && s.TV.Paused():
+		s.TV.Play(s.TV.Playing())
+	case action == "pause" && s.TV.Playing() != "" && !s.TV.Paused():
 		s.TV.Pause()
 	case action == "stop":
 		s.TV.Stop()
@@ -214,7 +214,6 @@ func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
 	var files []string
 	filepath.Walk(*root, walker(&files))
 	s.Files = files
-	s.etag = uuid.NewV4().String()
 	fmt.Fprintf(w, "found %d files", len(s.Files))
 }
 
@@ -236,15 +235,23 @@ func main() {
 		httplog = log.New(os.Stderr, "", log.Flags())
 	}
 
-	s := &server{
-		TV:   tv.New(*root),
-		etag: uuid.NewV4().String(),
+	s := &server{}
+	if *mocktv {
+		s.TV = tv.NewMock(*root)
+	} else {
+		s.TV = tv.New(*root)
+	}
+
+	if css, err := ioutil.ReadFile("static/materialize.min.css"); err != nil {
+		log.Fatalf("error reading css: %v", err)
+	} else {
+		s.CSS = template.CSS(css)
 	}
 
 	var err error
 	s.T, err = template.New("template").Funcs(template.FuncMap{
 		"urlencode": url.QueryEscape,
-	}).ParseGlob("templates/*.html")
+	}).ParseGlob("static/*.html")
 	if err != nil {
 		log.Fatalf("error parsing templates: %v", err)
 	}
