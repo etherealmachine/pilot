@@ -9,5 +9,8 @@
 		<p><a href="/controls?action=pause">Pause</a></p>
 		<p><a href="/controls?action=stop">Stop</a></p>
 		<p>Paused? {{ .TV.Paused }}</p>
+		{{ if .TV.CECErr }}
+			<p>CEC Errors: {{ .TV.CECErr }}</p>
+		{{ end }}
 	</body>
 </html>
