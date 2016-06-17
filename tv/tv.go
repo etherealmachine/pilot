@@ -63,38 +63,6 @@ func New(root string) *TV {
 	return t
 }
 
-func (tv *TV) logCmd(cmd *exec.Cmd) {
-	log.Printf("cmd: %s %s", cmd.Path, strings.Join(cmd.Args, " "))
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	go func() {
-		s := bufio.NewScanner(stdout)
-		for ok := s.Scan(); ok; ok = s.Scan() {
-			tv.cmdout = append(tv.cmdout, s.Text())
-		}
-		if s.Err() != nil {
-			tv.cmderr = append(tv.cmderr, s.Err().Error())
-		}
-	}()
-	go func() {
-		s := bufio.NewScanner(stderr)
-		for ok := s.Scan(); ok; ok = s.Scan() {
-			tv.cmdout = append(tv.cmdout, s.Text())
-		}
-		if s.Err() != nil {
-			tv.cmderr = append(tv.cmderr, s.Err().Error())
-		}
-	}()
-}
-
 func (tv *TV) Play(filename string) error {
 	if tv.Paused {
 		if err := dbusSend("int32:16"); err != nil {
