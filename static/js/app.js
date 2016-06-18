@@ -1,33 +1,42 @@
 function play(video) {
+	console.log(video);
 	$.post('/controls?action=play&video='+encodeURIComponent(video))
+	.done(function(data, textStatus, jqXHR) {
+		window.location = window.location;
+	})
 	.fail(function(jqXHR, textStatus, error) {
-
+		console.error(jqXHR.responseText);
 	});
-	window.location = window.location;
 }
 
 function stop() {
 	$.post('/controls?action=stop')
+	.done(function(data, textStatus, jqXHR) {
+		window.location = window.location;
+	})
 	.fail(function(jqXHR, textStatus, error) {
-
+		console.error(jqXHR.responseText);
 	});
-	window.location = window.location;
 }
 
 function pause() {
 	$.post('/controls?action=pause')
+	.done(function(data, textStatus, jqXHR) {
+		window.location = window.location;
+	})
 	.fail(function(jqXHR, textStatus, error) {
-
+		console.error(jqXHR.responseText);
 	});
-	window.location = window.location;
 }
 
 function resume() {
 	$.post('/controls?action=resume')
+	.done(function(data, textStatus, jqXHR) {
+		window.location = window.location;
+	})
 	.fail(function(jqXHR, textStatus, error) {
-
+		console.error(jqXHR.responseText);
 	});
-	window.location = window.location;
 }
 
 function createItem(video) {
@@ -35,7 +44,7 @@ function createItem(video) {
 	p.appendChild(document.createTextNode(video));
 	p.appendChild(document.createElement('br'));
 	var playOnTVLink = document.createElement('a');
-	playOnTVLink.href = 'javascript:play("'+video+'")';
+	playOnTVLink.href = 'javascript:play("'+encodeURIComponent(video)+'")';
 	playOnTVLink.appendChild(document.createTextNode('Play on TV'));
 	p.appendChild(playOnTVLink);
 	p.appendChild(document.createElement('br'));

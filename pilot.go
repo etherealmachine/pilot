@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -112,7 +114,11 @@ func calculateHash(files []string) string {
 	for _, f := range files {
 		h.Write([]byte(f))
 	}
-	return string(h.Sum(nil))
+	encodedBytes := new(bytes.Buffer)
+	encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
+	encoder.Write(h.Sum(nil))
+	encoder.Close()
+	return encodedBytes.String()
 }
 
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
@@ -123,16 +129,11 @@ func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
-	video, err := url.QueryUnescape(r.FormValue("video"))
-	if err != nil {
-		fmt.Fprintf(w, "error decoding query: %v", err)
-		return
-	}
 	t := s.T.Lookup("play.html")
 	if err := t.Execute(w, struct {
 		Src string
 	}{
-		Src: video,
+		Src: r.FormValue("video"),
 	}); err != nil {
 		log.Printf("error executing template: %v", err)
 	}
@@ -143,11 +144,7 @@ func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch {
 	case action == "play" && s.TV.Playing() == "":
-		var video string
-		video, err = url.QueryUnescape(r.FormValue("video"))
-		if err != nil {
-			break
-		}
+		video := r.FormValue("video")
 		found := false
 		for _, f := range s.Files {
 			if f == video {
