@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/etherealmachine/pilot/tv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -250,6 +251,7 @@ func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 
+	logrus.SetLevel(logrus.DebugLevel)
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	if *logdir != "" {
 		httplog = log.New(&lumberjack.Logger{

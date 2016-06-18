@@ -2,10 +2,11 @@ package tv
 
 import (
 	"log"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/etherealmachine/cec"
-	"github.com/jleight/omxplayer"
+	"github.com/etherealmachine/omxplayer"
 )
 
 type TV interface {
@@ -70,7 +71,7 @@ func (tv *tv) Paused() bool {
 		log.Println(err)
 		return false
 	}
-	return status == "paused"
+	return status == "Paused"
 }
 
 func (tv *tv) CECErr() error {
@@ -83,11 +84,17 @@ func (tv *tv) Play(filename string) error {
 			return err
 		}
 	}
+	omxplayer.SetUser("root", "/root")
 	var err error
 	tv.player, err = omxplayer.New(filepath.Join(tv.root, filename))
 	if err != nil {
 		return err
 	}
+	tv.player.WaitForReady()
+	if err := tv.player.PlayPause(); err != nil {
+		return err
+	}
+	tv.playing = filename
 	return nil
 }
 
@@ -109,6 +116,11 @@ func (tv *tv) Stop() error {
 		if err := tv.player.Quit(); err != nil {
 			return err
 		}
+	}
+	if !tv.player.IsRunning() {
+		tv.playing = ""
+		tv.player = nil
+		exec.Command("killall", "dbus-daemon").Run()
 	}
 	return nil
 }
