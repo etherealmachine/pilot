@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
@@ -54,10 +56,10 @@ var video = map[string]bool{
 }
 
 type server struct {
-	Files        []string
-	TV           tv.TV
-	T            *template.Template
-	ControlError error
+	Files     []string
+	filesHash string
+	TV        tv.TV
+	T         *template.Template
 }
 
 func walker(files *[]string) func(string, os.FileInfo, error) error {
@@ -105,6 +107,14 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 	})
 }
 
+func calculateHash(files []string) string {
+	h := sha256.New()
+	for _, f := range files {
+		h.Write([]byte(f))
+	}
+	return string(h.Sum(nil))
+}
+
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	t := s.T.Lookup("index.html")
 	if err := t.Execute(w, s); err != nil {
@@ -116,22 +126,6 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 	video, err := url.QueryUnescape(r.FormValue("video"))
 	if err != nil {
 		fmt.Fprintf(w, "error decoding query: %v", err)
-		return
-	}
-	found := false
-	for _, f := range s.Files {
-		if f == video {
-			found = true
-			break
-		}
-	}
-	if !found {
-		fmt.Fprintf(w, "no video named %q found", video)
-		return
-	}
-	if r.FormValue("tv") == "true" {
-		s.TV.Play(video)
-		http.Redirect(w, r, "/controls", http.StatusTemporaryRedirect)
 		return
 	}
 	t := s.T.Lookup("play.html")
@@ -146,15 +140,37 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 	action := r.FormValue("action")
+	var err error
 	switch {
+	case action == "play" && s.TV.Playing() == "":
+		var video string
+		video, err = url.QueryUnescape(r.FormValue("video"))
+		if err != nil {
+			break
+		}
+		found := false
+		for _, f := range s.Files {
+			if f == video {
+				found = true
+				break
+			}
+		}
+		if !found {
+			err = fmt.Errorf("no video named %q found", video)
+			break
+		}
+		err = s.TV.Play(video)
 	case action == "resume" && s.TV.Playing() != "" && s.TV.Paused():
-		s.ControlError = s.TV.Play(s.TV.Playing())
+		err = s.TV.Play(s.TV.Playing())
 	case action == "pause" && s.TV.Playing() != "" && !s.TV.Paused():
-		s.ControlError = s.TV.Pause()
+		err = s.TV.Pause()
 	case action == "stop":
-		s.ControlError = s.TV.Stop()
+		err = s.TV.Stop()
 	}
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
 }
 
 func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -215,8 +231,25 @@ func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
 	var files []string
 	filepath.Walk(*root, walker(&files))
+	s.filesHash = calculateHash(files)
 	s.Files = files
 	fmt.Fprintf(w, "found %d files", len(s.Files))
+}
+
+func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("If-None-Match") == s.filesHash {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Add("Cache-Control", "max-age=31536000")
+	w.Header().Add("ETag", s.filesHash)
+	bs, err := json.Marshal(s.Files)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(bs)
 }
 
 func main() {
@@ -255,6 +288,7 @@ func main() {
 
 	log.Println("pilot is up, looking for files to serve...")
 	filepath.Walk(*root, walker(&s.Files))
+	s.filesHash = calculateHash(s.Files)
 	log.Printf("found %d files", len(s.Files))
 
 	http.HandleFunc("/login", s.LoginHandler)
@@ -263,6 +297,7 @@ func main() {
 	http.HandleFunc("/download", s.DownloadHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
 	http.HandleFunc("/reload", s.ReloadHandler)
+	http.HandleFunc("/files.json", s.FilesHandler)
 	http.Handle("/js/", http.StripPrefix("/js", http.FileServer(http.Dir("static/js"))))
 	http.Handle("/css/", http.StripPrefix("/css", http.FileServer(http.Dir("static/css"))))
 	http.Handle("/fonts/", http.StripPrefix("/fonts", http.FileServer(http.Dir("static/fonts"))))
