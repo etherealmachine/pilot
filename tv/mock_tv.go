@@ -38,6 +38,11 @@ func (tv *mockTV) Pause() error {
 	return nil
 }
 
+func (tv *mockTV) Unpause() error {
+	tv.paused = false
+	return nil
+}
+
 func (tv *mockTV) Stop() error {
 	tv.playing = ""
 	tv.paused = false

@@ -157,9 +157,7 @@ func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		err = s.TV.Play(video)
-	case action == "resume" && s.TV.Playing() != "" && s.TV.Paused():
-		err = s.TV.Play(s.TV.Playing())
-	case action == "pause" && s.TV.Playing() != "" && !s.TV.Paused():
+	case (action == "pause" || action == "resume") && s.TV.Playing() != "":
 		err = s.TV.Pause()
 	case action == "stop":
 		err = s.TV.Stop()

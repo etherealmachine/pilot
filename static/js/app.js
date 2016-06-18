@@ -1,5 +1,4 @@
 function play(video) {
-	console.log(video);
 	$.post('/controls?action=play&video='+encodeURIComponent(video))
 	.done(function(data, textStatus, jqXHR) {
 		window.location = window.location;
