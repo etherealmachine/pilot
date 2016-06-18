@@ -1,7 +1,9 @@
 package tv
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -90,10 +92,47 @@ func (tv *tv) Play(filename string) error {
 		return nil
 	}
 	tv.player = exec.Command("omxplayer", filepath.Join(tv.root, filename))
+	stderr, err := tv.player.StderrPipe()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	stdout, err := tv.player.StdoutPipe()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = tv.player.Start()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
 	go func() {
-		out, err := tv.player.CombinedOutput()
-		if err != nil {
-			log.Printf("%v: %s", err, out)
+		r := bufio.NewReader(stderr)
+		for {
+			l, err := r.ReadString('\n')
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			log.Printf("omxplayer stderr: %s", l)
+		}
+	}()
+	go func() {
+		r := bufio.NewReader(stdout)
+		for {
+			l, err := r.ReadString('\n')
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			log.Printf("omxplayer stdout: %s", l)
 		}
 	}()
 	tv.playing = filename
@@ -125,14 +164,15 @@ func (tv *tv) Stop() error {
 	err := dbusSend("int32:15")
 	if err != nil {
 		log.Println(err)
-	}
-	err = tv.player.Process.Kill()
-	if err != nil {
-		log.Println(err)
-	}
-	err = tv.player.Wait()
-	if err != nil {
-		log.Println(err)
+		err = tv.player.Process.Kill()
+		if err != nil {
+			log.Println(err)
+		}
+		err = tv.player.Wait()
+		if err != nil {
+			log.Println(err)
+			return err
+		}
 	}
 	tv.player = nil
 	tv.playing = ""

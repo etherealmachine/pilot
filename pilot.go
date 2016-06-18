@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -55,11 +54,10 @@ var video = map[string]bool{
 }
 
 type server struct {
-	Files []string
-	TV    tv.TV
-	T     *template.Template
-	JS    template.JS
-	CSS   template.CSS
+	Files        []string
+	TV           tv.TV
+	T            *template.Template
+	ControlError error
 }
 
 func walker(files *[]string) func(string, os.FileInfo, error) error {
@@ -94,12 +92,8 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 			if _, ok := getLoginCookie(r); !ok {
 				t := s.T.Lookup("login.html")
 				if err := t.Execute(w, &struct {
-					JS         template.JS
-					CSS        template.CSS
 					RedirectTo string
 				}{
-					JS:         s.JS,
-					CSS:        s.CSS,
 					RedirectTo: r.URL.Path,
 				}); err != nil {
 					log.Println(err)
@@ -142,12 +136,8 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	t := s.T.Lookup("play.html")
 	if err := t.Execute(w, struct {
-		JS  template.JS
-		CSS template.CSS
 		Src string
 	}{
-		JS:  s.JS,
-		CSS: s.CSS,
 		Src: video,
 	}); err != nil {
 		log.Printf("error executing template: %v", err)
@@ -158,11 +148,11 @@ func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 	action := r.FormValue("action")
 	switch {
 	case action == "resume" && s.TV.Playing() != "" && s.TV.Paused():
-		s.TV.Play(s.TV.Playing())
+		s.ControlError = s.TV.Play(s.TV.Playing())
 	case action == "pause" && s.TV.Playing() != "" && !s.TV.Paused():
-		s.TV.Pause()
+		s.ControlError = s.TV.Pause()
 	case action == "stop":
-		s.TV.Stop()
+		s.ControlError = s.TV.Stop()
 	}
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
@@ -219,6 +209,7 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "static/favicon.ico")
 }
 
 func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +222,7 @@ func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 
+	log.SetFlags(log.Flags() | log.Lshortfile)
 	if *logdir != "" {
 		httplog = log.New(&lumberjack.Logger{
 			Filename: filepath.Join(*logdir, "httprequests.log"),
@@ -253,22 +245,6 @@ func main() {
 		s.TV = tv.New(*root)
 	}
 
-	if js, err := ioutil.ReadFile("static/jquery-2.1.1.min.js"); err != nil {
-		log.Fatalf("error reading js: %v", err)
-	} else {
-		s.JS = template.JS(js)
-	}
-	if js, err := ioutil.ReadFile("static/materialize.min.js"); err != nil {
-		log.Fatalf("error reading js: %v", err)
-	} else {
-		s.JS += "\n" + template.JS(js)
-	}
-	if css, err := ioutil.ReadFile("static/materialize.min.css"); err != nil {
-		log.Fatalf("error reading css: %v", err)
-	} else {
-		s.CSS = template.CSS(css)
-	}
-
 	var err error
 	s.T, err = template.New("template").Funcs(template.FuncMap{
 		"urlencode": url.QueryEscape,
@@ -287,6 +263,9 @@ func main() {
 	http.HandleFunc("/download", s.DownloadHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
 	http.HandleFunc("/reload", s.ReloadHandler)
+	http.Handle("/js/", http.StripPrefix("/js", http.FileServer(http.Dir("static/js"))))
+	http.Handle("/css/", http.StripPrefix("/css", http.FileServer(http.Dir("static/css"))))
+	http.Handle("/fonts/", http.StripPrefix("/fonts", http.FileServer(http.Dir("static/fonts"))))
 	http.HandleFunc("/", s.IndexHandler)
 
 	log.Printf("Server listening at %s", *addr)
