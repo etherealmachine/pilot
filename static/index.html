@@ -10,6 +10,9 @@
 			.brand-logo {
 				margin-left: 10px;
 			}
+			.now-playing {
+				margin-right: 10px;
+			}
 		</style>
 	</head>
 	<body>
@@ -18,7 +21,14 @@
 	      <a href="#" class="brand-logo">Pilot</a>
 	      <ul id="nav-mobile" class="right hide-on-med-and-down">
 	      	{{ if ne .TV.Playing "" }}
-	        <li>Now Playing: {{ .TV.Playing }}</li>
+	        <li class="now-playing">
+	        	<span
+	        			class="yellow-text lighten-5"
+	        			style="font-weight: bold">
+	        		Now Playing:
+	        	</span>
+	        	{{ .TV.Playing }}
+	        </li>
 	        <li>
 	        	<a href="/controls?action=stop">
 	        		<i class="material-icons">stop</i>
@@ -61,5 +71,6 @@
 			</p>
 			{{ end }}
 		</div>
+		<script>{{ .JS }}</script>
 	</body>
 </html>

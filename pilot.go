@@ -58,6 +58,7 @@ type server struct {
 	Files []string
 	TV    tv.TV
 	T     *template.Template
+	JS    template.JS
 	CSS   template.CSS
 }
 
@@ -92,8 +93,14 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 		if r.URL.Path != "/login" {
 			if _, ok := getLoginCookie(r); !ok {
 				t := s.T.Lookup("login.html")
-				if err := t.Execute(w, &struct{RedirectTo string}{
-					RedirectTo: r.URL.Path
+				if err := t.Execute(w, &struct {
+					JS         template.JS
+					CSS        template.CSS
+					RedirectTo string
+				}{
+					JS:         s.JS,
+					CSS:        s.CSS,
+					RedirectTo: r.URL.Path,
 				}); err != nil {
 					log.Println(err)
 				}
@@ -135,8 +142,12 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	t := s.T.Lookup("play.html")
 	if err := t.Execute(w, struct {
+		JS  template.JS
+		CSS template.CSS
 		Src string
 	}{
+		JS:  s.JS,
+		CSS: s.CSS,
 		Src: video,
 	}); err != nil {
 		log.Printf("error executing template: %v", err)
@@ -153,11 +164,7 @@ func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 	case action == "stop":
 		s.TV.Stop()
 	}
-
-	t := s.T.Lookup("controls.html")
-	if err := t.Execute(w, s); err != nil {
-		log.Printf("error executing template: %v", err)
-	}
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +195,10 @@ func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	if _, ok := getLoginCookie(r); ok {
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		return
+	}
 	pass := r.FormValue("password")
 	if pass != *password {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -242,6 +253,16 @@ func main() {
 		s.TV = tv.New(*root)
 	}
 
+	if js, err := ioutil.ReadFile("static/jquery-2.1.1.min.js"); err != nil {
+		log.Fatalf("error reading js: %v", err)
+	} else {
+		s.JS = template.JS(js)
+	}
+	if js, err := ioutil.ReadFile("static/materialize.min.js"); err != nil {
+		log.Fatalf("error reading js: %v", err)
+	} else {
+		s.JS += "\n" + template.JS(js)
+	}
 	if css, err := ioutil.ReadFile("static/materialize.min.css"); err != nil {
 		log.Fatalf("error reading css: %v", err)
 	} else {
@@ -271,5 +292,5 @@ func main() {
 	log.Printf("Server listening at %s", *addr)
 	log.Fatal(http.ListenAndServe(
 		*addr,
-		authRequests(logRequests(http.DefaultServeMux))))
+		s.authenticate(logRequests(http.DefaultServeMux))))
 }

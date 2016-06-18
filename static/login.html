@@ -1,17 +1,50 @@
 <!doctype html>
 <html>
 	<head>
-		<title>pilot</title>
+		<title></title>
 		<style>{{ .CSS }}</style>
+		<style>
+			form {
+				position: relative;
+				margin-top: 30px;
+			}
+			.input-field {
+				float: left;
+				min-width: 300px;
+			}
+			.row {
+				display: flex;
+				justify-content: center;
+			}
+			button {
+				top: 25px;
+				left: 5px;
+			}
+		</style>
 	</head>
 	<body>
-		<form action="/login" method="post">
-      <input
-      		id="password"
-      		type="password"
-      		name="password"
-      		placeholder="password">
-      <button type="submit">Login</button>
-    </form>
+		<div class="container">
+			<form
+					class="row"
+					action="/login"
+					method="post">
+				<div class="col">
+					<div class="input-field">
+			      <input
+			      		type="password"
+			      		name="password"
+			      		placeholder="Password">
+		     	</div>
+		      <button
+		      		class="waves-effect waves-light btn"
+		      		type="submit">Login</button>
+    		</div>
+	      <input
+	      		type="hidden"
+	      		name="redirect_to"
+	      		value="{{ .RedirectTo }}">
+	    </form>
+	   </div>
+		<script>{{ .JS }}</script>
 	</body>
 </html>`
