@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,6 +163,11 @@ func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
 		err = s.TV.Pause()
 	case action == "stop":
 		err = s.TV.Stop()
+	case action == "seek":
+		seconds, err := strconv.Atoi(r.FormValue("seconds"))
+		if err == nil {
+			err = s.TV.Seek(seconds)
+		}
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

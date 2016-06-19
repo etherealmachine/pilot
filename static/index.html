@@ -42,8 +42,18 @@
 	        </li>
 	       	{{ else if not .TV.Paused }}
 	        <li>
+	        	<a href="javascript:seek(-60)">
+	        		<i class="material-icons">skip_previous</i>
+	        	</a>
+	        </li>
+	        <li>
 	        	<a href="javascript:pause()">
 	        		<i class="material-icons">pause</i>
+	        	</a>
+	        </li>
+	        <li>
+	        	<a href="javascript:seek(60)">
+	        		<i class="material-icons">skip_next</i>
 	        	</a>
 	        </li>
 	       	{{ end }}

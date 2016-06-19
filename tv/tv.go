@@ -4,6 +4,7 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/etherealmachine/cec"
 	"github.com/etherealmachine/omxplayer"
@@ -16,6 +17,7 @@ type TV interface {
 	Play(filename string) error
 	Pause() error
 	Stop() error
+	Seek(seconds int) error
 }
 
 type tv struct {
@@ -50,6 +52,22 @@ func New(root string) TV {
 	conn.On(cec.Stop, func() {
 		if t.player != nil && t.playing != "" {
 			if err := t.Stop(); err != nil {
+				log.Println(err)
+				t.cecErr = err
+			}
+		}
+	})
+	conn.On(cec.FastForward, func() {
+		if t.player != nil && t.playing != "" {
+			if err := t.Seek(60); err != nil {
+				log.Println(err)
+				t.cecErr = err
+			}
+		}
+	})
+	conn.On(cec.Rewind, func() {
+		if t.player != nil && t.playing != "" {
+			if err := t.Seek(-60); err != nil {
 				log.Println(err)
 				t.cecErr = err
 			}
@@ -123,4 +141,14 @@ func (tv *tv) Stop() error {
 		exec.Command("killall", "dbus-daemon").Run()
 	}
 	return nil
+}
+
+func (tv *tv) Seek(seconds int) error {
+	if tv.player == nil {
+		return nil
+	}
+	_, err := tv.player.Seek(int64(
+		time.Duration(seconds) *
+			(time.Second / time.Microsecond)))
+	return err
 }

@@ -48,3 +48,7 @@ func (tv *mockTV) Stop() error {
 	tv.paused = false
 	return nil
 }
+
+func (tv *mockTV) Seek(seconds int) error {
+	return nil
+}

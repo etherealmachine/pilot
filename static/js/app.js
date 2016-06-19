@@ -38,6 +38,13 @@ function resume() {
 	});
 }
 
+function seek(seconds) {
+	$.post('/controls?action=seek&seconds='+seconds)
+	.fail(function(jqXHR, textStatus, error) {
+		console.error(jqXHR.responseText);
+	});
+}
+
 function createItem(video) {
 	var p = document.createElement('p');
 	p.appendChild(document.createTextNode(video));
