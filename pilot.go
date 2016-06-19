@@ -7,13 +7,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,12 +22,13 @@ import (
 )
 
 var (
-	root     = flag.String("root", ".", "Root folder to serve media from.")
-	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
-	addr     = flag.String("addr", ":80", "Address to serve from.")
-	password = flag.String("password", "", "Login password.")
-	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
-	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
+	root         = flag.String("root", ".", "Root folder to serve media from.")
+	folders      = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
+	addr         = flag.String("addr", ":80", "Address to serve from.")
+	password     = flag.String("password", "", "Login password.")
+	logdir       = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
+	mocktv       = flag.Bool("mocktv", false, "Use mock TV for testing.")
+	unvulcanized = flag.Bool("unvulcanized", false, "Serve unvulcanized app for testing.")
 
 	httplog *log.Logger
 )
@@ -62,8 +62,8 @@ var video = map[string]bool{
 type server struct {
 	Files     []string
 	filesHash string
+	indexHash string
 	TV        tv.TV
-	T         *template.Template
 }
 
 func walker(files *[]string) func(string, os.FileInfo, error) error {
@@ -96,8 +96,7 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/login" {
 			if _, ok := getLoginCookie(r); !ok {
-				t := s.T.Lookup("login.html")
-				if err := t.Execute(w, &struct {
+				if err := loginTemplate.Execute(w, &struct {
 					RedirectTo string
 				}{
 					RedirectTo: r.URL.Path,
@@ -123,65 +122,13 @@ func calculateHash(files []string) string {
 	return encodedBytes.String()
 }
 
-func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	t := s.T.Lookup("index.html")
-	if err := t.Execute(w, s); err != nil {
-		log.Printf("error executing template: %v", err)
-	}
-}
-
-func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
-	t := s.T.Lookup("play.html")
-	if err := t.Execute(w, struct {
-		Src string
-	}{
-		Src: r.FormValue("video"),
-	}); err != nil {
-		log.Printf("error executing template: %v", err)
-	}
-}
-
-func (s *server) ControlsHandler(w http.ResponseWriter, r *http.Request) {
-	action := r.FormValue("action")
-	var err error
-	switch {
-	case action == "play" && s.TV.Playing() == "":
-		video := r.FormValue("video")
-		found := false
-		for _, f := range s.Files {
-			if f == video {
-				found = true
-				break
-			}
-		}
-		if !found {
-			err = fmt.Errorf("no video named %q found", video)
-			break
-		}
-		err = s.TV.Play(video)
-	case (action == "pause" || action == "resume") && s.TV.Playing() != "":
-		err = s.TV.Pause()
-	case action == "stop":
-		err = s.TV.Stop()
-	case action == "seek":
-		seconds, err := strconv.Atoi(r.FormValue("seconds"))
-		if err == nil {
-			err = s.TV.Seek(seconds)
-		}
-	}
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	}
-}
-
 func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
-	video, err := url.QueryUnescape(r.FormValue("video"))
+	file, err := url.QueryUnescape(r.FormValue("file"))
 	if err != nil {
 		fmt.Fprintf(w, "error decoding query: %v", err)
 		return
 	}
-	f, err := os.Open(filepath.Join(*root, video))
+	f, err := os.Open(filepath.Join(*root, file))
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -198,8 +145,8 @@ func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Add(
-		"Content-Disposition", "attachment;filename="+filepath.Base(video))
-	http.ServeContent(w, r, video, fi.ModTime(), f)
+		"Content-Disposition", "attachment;filename="+filepath.Base(file))
+	http.ServeContent(w, r, file, fi.ModTime(), f)
 }
 
 func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -226,25 +173,14 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, r.FormValue("redirect_to"), http.StatusTemporaryRedirect)
 }
 
-func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/favicon.ico")
-}
-
-func (s *server) ReloadHandler(w http.ResponseWriter, r *http.Request) {
-	var files []string
-	filepath.Walk(*root, walker(&files))
-	s.filesHash = calculateHash(files)
-	s.Files = files
-	fmt.Fprintf(w, "found %d files", len(s.Files))
-}
-
 func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("If-None-Match") == s.filesHash {
+	if h := r.Header.Get("If-None-Match"); h != "" && h == s.filesHash {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	w.Header().Add("Cache-Control", "max-age=31536000")
-	w.Header().Add("ETag", s.filesHash)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "max-age=31536000")
+	w.Header().Set("ETag", s.filesHash)
 	bs, err := json.Marshal(s.Files)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -252,6 +188,39 @@ func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(bs)
+}
+
+func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "favicon.ico")
+}
+
+func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" {
+		if h := r.Header.Get("If-None-Match"); h != "" && h == s.indexHash {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		bs, err := ioutil.ReadFile("index.html")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write(bs)
+			return
+		}
+		h := sha256.New()
+		h.Write(bs)
+		encodedBytes := new(bytes.Buffer)
+		encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
+		encoder.Write(h.Sum(nil))
+		encoder.Close()
+		s.indexHash = encodedBytes.String()
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Cache-Control", "max-age=31536000")
+		w.Header().Set("ETag", s.indexHash)
+		w.Write(bs)
+		return
+	}
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte("404 Page Not Found"))
 }
 
 func main() {
@@ -281,30 +250,21 @@ func main() {
 		s.TV = tv.New(*root)
 	}
 
-	var err error
-	s.T, err = template.New("template").Funcs(template.FuncMap{
-		"urlencode": url.QueryEscape,
-	}).ParseGlob("static/*.html")
-	if err != nil {
-		log.Fatalf("error parsing templates: %v", err)
-	}
-
 	log.Println("pilot is up, looking for files to serve...")
 	filepath.Walk(*root, walker(&s.Files))
 	s.filesHash = calculateHash(s.Files)
 	log.Printf("found %d files", len(s.Files))
 
+	http.Handle("/controls", rpcServer(s))
 	http.HandleFunc("/login", s.LoginHandler)
-	http.HandleFunc("/play", s.PlayHandler)
-	http.HandleFunc("/controls", s.ControlsHandler)
 	http.HandleFunc("/download", s.DownloadHandler)
-	http.HandleFunc("/favicon.ico", s.FaviconHandler)
-	http.HandleFunc("/reload", s.ReloadHandler)
 	http.HandleFunc("/files.json", s.FilesHandler)
-	http.Handle("/js/", http.StripPrefix("/js", http.FileServer(http.Dir("static/js"))))
-	http.Handle("/css/", http.StripPrefix("/css", http.FileServer(http.Dir("static/css"))))
-	http.Handle("/fonts/", http.StripPrefix("/fonts", http.FileServer(http.Dir("static/fonts"))))
-	http.HandleFunc("/", s.IndexHandler)
+	http.HandleFunc("/favicon.ico", s.FaviconHandler)
+	if *unvulcanized {
+		http.Handle("/", http.FileServer(http.Dir("app")))
+	} else {
+		http.HandleFunc("/", s.IndexHandler)
+	}
 
 	log.Printf("Server listening at %s", *addr)
 	log.Fatal(http.ListenAndServe(

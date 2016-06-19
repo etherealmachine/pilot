@@ -18,6 +18,8 @@ type TV interface {
 	Pause() error
 	Stop() error
 	Seek(seconds int) error
+	Position() int64
+	Duration() int64
 }
 
 type tv struct {
@@ -94,6 +96,22 @@ func (tv *tv) Paused() bool {
 
 func (tv *tv) CECErr() error {
 	return tv.cecErr
+}
+
+func (tv *tv) Position() int64 {
+	if tv.player == nil {
+		return 0
+	}
+	position, _ := tv.player.Position()
+	return position
+}
+
+func (tv *tv) Duration() int64 {
+	if tv.player == nil {
+		return 0
+	}
+	duration, _ := tv.player.Duration()
+	return duration
 }
 
 func (tv *tv) Play(filename string) error {

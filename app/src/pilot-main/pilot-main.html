@@ -1,0 +1,242 @@
+<link rel="import" href="../../bower_components/polymer/polymer.html">
+<link rel="import" href="../../bower_components/iron-ajax/iron-ajax.html">
+<link rel="import" href="../../bower_components/app-layout/app-header-layout/app-header-layout.html">
+<link rel="import" href="../../bower_components/app-layout/app-header/app-header.html">
+<link rel="import" href="../../bower_components/app-layout/app-toolbar/app-toolbar.html">
+<link rel="import" href="../../bower_components/app-layout/app-scroll-effects/effects/waterfall.html">
+<link rel="import" href="../../bower_components/paper-styles/color.html">
+<link rel="import" href="../../bower_components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="../../bower_components/iron-icons/av-icons.html">
+
+<dom-module id="pilot-main">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+      app-header {
+        color: white;
+        background-color: var(--paper-blue-500);
+      }
+      .container {
+        margin: 0 10% 0 10%;
+      }
+      .now-playing {
+        min-width: 500px;
+        font-size: 12pt;
+      }
+      .now-playing span {
+        color: var(--paper-yellow-300);
+        font-weight: bold;
+      }
+      .hidden {
+        visibility: hidden;
+      }
+      .position {
+        margin-right: 16px;
+      }
+      .divider {
+        height: 100%;
+        border-right: 2px solid white;
+      }
+      .controls {
+        margin-left: 16px;
+      }
+    </style>
+
+    <iron-ajax
+        auto
+        url="/files.json"
+        handle-as="json"
+        last-response="{{files}}"
+        loading="{{loading}}"
+        debounce-duration="300">
+    </iron-ajax>
+
+    <iron-ajax
+        id="controls"
+        url="/controls"
+        method="POST"
+        content-type="application/json"
+        handle-as="json"
+        on-response="handleControlsResponse">
+    </iron-ajax>
+
+    <app-header-layout>
+
+      <app-header fixed condenses effects="waterfall">
+        <app-toolbar>
+          <div title>Pilot</div>
+          <p class="now-playing">
+            <span>Now Playing:</span>
+            {{playing}}
+          </p>
+          <!--p class$="position {{hidePosition(playing)}}">
+            {{formatDuration(position)}}
+            /
+            {{formatDuration(duration)}}
+          </p-->
+          <span class="divider"></span>
+          <div class="controls">
+            <paper-icon-button
+                icon="av:skip-previous"
+                on-tap="rewind"
+                disabled$="{{disableControl(playing)}}">
+            </paper-icon-button>
+            <paper-icon-button
+                icon="av:stop"
+                on-tap="stop"
+                disabled$="{{disableControl(playing)}}">
+            </paper-icon-button>
+            <paper-icon-button
+                icon="av:play-arrow"
+                on-tap="play"
+                hidden$="{{hidePlay(playing, paused)}}"
+                disabled$="{{disableControl(playing)}}">
+            </paper-icon-button>
+            <paper-icon-button
+                icon="av:pause"
+                on-tap="pause"
+                hidden$="{{hidePause(playing, paused)}}">
+            </paper-icon-button>
+            <paper-icon-button
+                icon="av:skip-next"
+                on-tap="fastForward"
+                disabled$="{{disableControl(playing)}}">
+            </paper-icon-button>
+          </div>
+        </app-toolbar>
+      </app-header>
+
+      <div class="container">
+        <template is="dom-repeat" items="[[files]]" as="file">
+          <p>
+            {{file}}
+            <br>
+            <a href="#" on-tap="playOnTV">Play on TV</a>
+            <br>
+            <a href="#" on-tap="playInBrowser">Play in Browser</a>
+            <br>
+            <a href="/download?file={{file}}">Download</a>
+          </p>
+        </template>
+      </div>
+    </app-header-layout>
+
+  </template>
+
+  <script src="../../bower_components/moment/min/moment.min.js">
+  </script>
+  <script>
+    Polymer({
+
+      is: 'pilot-main',
+
+      properties: {
+        files: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        },
+        loading: {
+          type: Boolean,
+          value: false
+        },
+        playing: {
+          type: String,
+          value: ""
+        },
+        paused: {
+          type: Boolean,
+          value: false
+        },
+        cecErr: {
+          type: String,
+          value: null
+        },
+        position: {
+          type: Number,
+          value: 0
+        },
+        duration: {
+          type: Number,
+          value: 0
+        }
+      },
+
+      hidePosition: function(playing) {
+        return playing == '' ? 'hidden' : '';
+      },
+
+      disableControl: function(playing) {
+        return playing == '';
+      },
+
+      hidePlay: function(playing, paused) {
+        return playing != '' && paused;
+      },
+
+      hidePause: function(playing, paused) {
+        return !this.hidePlay(playing, paused);
+      },
+
+      formatDuration(duration) {
+        return moment.utc(duration).format('mm:ss');
+      },
+
+      playOnTV: function(event) {
+        event.preventDefault();
+        this.rpc('Play', {file: event.model.file});
+      },
+
+      playInBrowser: function(event) {
+        event.preventDefault();
+        console.log(event.model.file);
+      },
+
+      play: function() {
+        this.rpc('Pause');
+      },
+
+      pause: function() {
+        this.rpc('Pause');
+      },
+
+      stop: function() {
+        this.rpc('Stop');
+      },
+
+      rewind: function() {
+        this.rpc('Seek', {seconds: -60});
+      },
+
+      fastForward: function() {
+        this.rpc('Seek', {seconds: 60});
+      },
+
+      rpc: function() {
+        var params = arguments[1];
+        if (!params) {
+          params = {};
+        }
+        this.$.controls.body = {
+          method: 'Controls.' + arguments[0],
+          params: [params],
+          id: 1
+        };
+        this.$.controls.generateRequest();
+      },
+
+      handleControlsResponse: function(resp) {
+        var r = resp.target.lastResponse.result;
+        this.playing = r.playing;
+        this.paused = r.paused;
+        this.cecErr = r.cec_err;
+        this.position = r.position;
+        this.duration = r.duration;
+      }
+
+    });
+  </script>
+</dom-module>

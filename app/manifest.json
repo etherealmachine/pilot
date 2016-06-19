@@ -1,0 +1,6 @@
+{
+  "name": "pilot",
+  "short_name": "pilot",
+  "start_url": "/",
+  "display": "standalone"
+}

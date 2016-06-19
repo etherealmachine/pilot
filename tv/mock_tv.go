@@ -34,12 +34,7 @@ func (tv *mockTV) Play(filename string) error {
 }
 
 func (tv *mockTV) Pause() error {
-	tv.paused = true
-	return nil
-}
-
-func (tv *mockTV) Unpause() error {
-	tv.paused = false
+	tv.paused = !tv.paused
 	return nil
 }
 
@@ -51,4 +46,18 @@ func (tv *mockTV) Stop() error {
 
 func (tv *mockTV) Seek(seconds int) error {
 	return nil
+}
+
+func (tv *mockTV) Position() int64 {
+	if tv.playing != "" {
+		return 100000
+	}
+	return 0
+}
+
+func (tv *mockTV) Duration() int64 {
+	if tv.playing != "" {
+		return 1000000
+	}
+	return 0
 }

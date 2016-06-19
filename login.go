@@ -1,6 +1,7 @@
 package main
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 	"time"
@@ -9,6 +10,41 @@ import (
 )
 
 var bakery *securecookie.SecureCookie
+
+var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
+<html>
+	<head>
+		<style>
+			form {
+				margin-top: 30px;
+			}
+			form {
+				display: flex;
+				justify-content: center;
+			}
+		</style>
+	</head>
+	<body>
+		<div>
+			<form
+					action="/login"
+					method="post">
+	      <input
+	      		type="password"
+	      		name="password"
+	      		placeholder="Password">
+	      <button
+	      		type="submit">
+	      	Login
+	      </button>
+	      <input
+	      		type="hidden"
+	      		name="redirect_to"
+	      		value="{{ .RedirectTo }}">
+	    </form>
+	   </div>
+	</body>
+</html>`))
 
 func init() {
 	bakery = securecookie.New(
