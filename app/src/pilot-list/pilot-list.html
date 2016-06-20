@@ -1,0 +1,48 @@
+<link rel="import" href="../../bower_components/polymer/polymer.html">
+
+<dom-module id="pilot-list">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+    </style>
+
+    <template is="dom-repeat" items="[[files]]" as="file">
+      <p>
+        {{file}}
+        <br>
+        <a href="#" on-tap="playOnTV">Play on TV</a>
+        <br>
+        <a href="#" on-tap="playInBrowser">Play in Browser</a>
+        <br>
+        <a href="/download?file={{file}}">Download</a>
+      </p>
+    </template>
+
+  </template>
+
+  <script>
+    Polymer({
+
+      is: 'pilot-list',
+
+      properties: {
+        files: Array
+      },
+
+      playOnTV: function(event) {
+        event.preventDefault();
+        this.fire('rpc',
+          {method: 'Play', params: {file: event.model.file}});
+      },
+
+      playInBrowser: function(event) {
+        event.preventDefault();
+        this.fire('page',
+          {path: 'Play', params: {file: event.model.file}});
+      }
+
+    });
+  </script>
+</dom-module>

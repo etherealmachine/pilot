@@ -1,0 +1,143 @@
+<link rel="import" href="../../bower_components/polymer/polymer.html">
+
+<dom-module id="pilot-controls">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+      .now-playing {
+        margin-right: 16px;
+        font-size: 10pt;
+      }
+      .now-playing span {
+        color: var(--paper-yellow-300);
+        font-weight: bold;
+      }
+      .hidden {
+        visibility: hidden;
+      }
+      .position {
+        margin-right: 16px;
+        font-size: 10pt;
+      }
+      .divider {
+        height: 100%;
+        border-right: 2px solid white;
+      }
+      .buttons {
+        margin-left: 16px;
+      }
+      @media (max-width: 800px) {
+
+        .hidden {
+          display: none;
+        }
+        .divider {
+          display: none;
+        }
+        .buttons {
+          @apply(--layout-self-center);
+          margin: 0;
+        }
+      }
+    </style>
+
+    <p class$="now-playing {{hideIfNotPlaying(playing)}}">
+      <span>Now Playing:</span>
+      {{playing}}
+    </p>
+    <p class$="position {{hideIfNotPlaying(playing)}}">
+      {{formatDuration(position)}}
+      /
+      {{formatDuration(duration)}}
+    </p>
+    <span class="divider"></span>
+    <div class="buttons">
+      <paper-icon-button
+          icon="av:skip-previous"
+          on-tap="rewind"
+          disabled$="{{disableControl(playing)}}">
+      </paper-icon-button>
+      <paper-icon-button
+          icon="av:stop"
+          on-tap="stop"
+          disabled$="{{disableControl(playing)}}">
+      </paper-icon-button>
+      <paper-icon-button
+          icon="av:play-arrow"
+          on-tap="play"
+          hidden$="{{hidePlay(playing, paused)}}"
+          disabled$="{{disableControl(playing)}}">
+      </paper-icon-button>
+      <paper-icon-button
+          icon="av:pause"
+          on-tap="pause"
+          hidden$="{{hidePause(playing, paused)}}">
+      </paper-icon-button>
+      <paper-icon-button
+          icon="av:skip-next"
+          on-tap="fastForward"
+          disabled$="{{disableControl(playing)}}">
+      </paper-icon-button>
+    </div>
+
+  </template>
+
+  <script>
+    Polymer({
+
+      is: 'pilot-controls',
+
+      properties: {
+        playing: String,
+        paused: Boolean,
+        cecErr: String,
+        position: Number,
+        duration: Number
+      },
+
+      hideIfNotPlaying: function(playing) {
+        return playing == '' ? 'hidden' : '';
+      },
+
+      disableControl: function(playing) {
+        return playing == '';
+      },
+
+      hidePlay: function(playing, paused) {
+        return playing != '' && !paused;
+      },
+
+      hidePause: function(playing, paused) {
+        return !this.hidePlay(playing, paused);
+      },
+
+      formatDuration(duration) {
+        return moment.utc(duration).format('mm:ss');
+      },
+
+      play: function() {
+        this.fire('rpc', {method: 'Pause'});
+      },
+
+      pause: function() {
+        this.fire('rpc', {method: 'Pause'});
+      },
+
+      stop: function() {
+        this.fire('rpc', {method: 'Stop'});
+      },
+
+      rewind: function() { // back 60 seconds
+        this.fire('rpc',
+          {method: 'Seek', params: {milliseconds: -60 * 1000}});
+      },
+
+      fastForward: function() { // ahead 60 seconds
+        this.fire('rpc',
+          {method: 'Seek', params: {milliseconds: 60 * 1000}});
+      }
+    });
+  </script>
+</dom-module>

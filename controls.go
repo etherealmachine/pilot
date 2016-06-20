@@ -23,7 +23,7 @@ type EmptyRequest struct {
 type StatusResponse struct {
 	Playing  string `json:"playing"`
 	Paused   bool   `json:"paused"`
-	CECErr   error  `json:"cec_err"`
+	CECErr   error  `json:"cecErr"`
 	Position int64  `json:"position"` // in milliseconds
 	Duration int64  `json:"duration"` // in milliseconds
 }
