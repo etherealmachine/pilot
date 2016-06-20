@@ -96,13 +96,7 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/login" {
 			if _, ok := getLoginCookie(r); !ok {
-				if err := loginTemplate.Execute(w, &struct {
-					RedirectTo string
-				}{
-					RedirectTo: r.URL.Path,
-				}); err != nil {
-					log.Println(err)
-				}
+				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 				return
 			}
 		}
@@ -155,22 +149,40 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pass := r.FormValue("password")
-	if pass != *password {
-		w.WriteHeader(http.StatusUnauthorized)
+	if pass == "" {
+		if err := loginTemplate.Execute(w, &struct {
+			Error      bool
+			RedirectTo string
+		}{
+			RedirectTo: r.URL.Path,
+		}); err != nil {
+			log.Println(err)
+		}
 		return
 	}
-	encoded, err := bakery.Encode("login", &LoginCookie{LoginTime: time.Now()})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
+	if pass == *password {
+		encoded, err := bakery.Encode("login", &LoginCookie{LoginTime: time.Now()})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:  "login",
+			Value: encoded,
+			Path:  "/",
+		})
+		http.Redirect(w, r, r.FormValue("redirect_to"), http.StatusTemporaryRedirect)
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:  "login",
-		Value: encoded,
-		Path:  "/",
-	})
-	http.Redirect(w, r, r.FormValue("redirect_to"), http.StatusTemporaryRedirect)
+	if err := loginTemplate.Execute(w, &struct {
+		Error      bool
+		RedirectTo string
+	}{
+		Error:      true,
+		RedirectTo: r.URL.Path,
+	}); err != nil {
+		log.Println(err)
+	}
 }
 
 func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
