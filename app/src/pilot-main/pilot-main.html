@@ -6,7 +6,11 @@
 <link rel="import" href="../../bower_components/app-layout/app-scroll-effects/effects/waterfall.html">
 <link rel="import" href="../../bower_components/paper-styles/color.html">
 <link rel="import" href="../../bower_components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
 <link rel="import" href="../../bower_components/iron-icons/av-icons.html">
+<link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
+<link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
+<link rel="import" href="../../bower_components/paper-item/paper-item.html">
 
 <dom-module id="pilot-main">
   <template>
@@ -22,7 +26,7 @@
         margin: 0 10% 0 10%;
       }
       .now-playing {
-        min-width: 500px;
+        margin-right: 16px;
         font-size: 12pt;
       }
       .now-playing span {
@@ -46,6 +50,7 @@
 
     <iron-ajax
         auto
+        id="files"
         url="/files.json"
         handle-as="json"
         last-response="{{files}}"
@@ -66,16 +71,25 @@
 
       <app-header fixed condenses effects="waterfall">
         <app-toolbar>
+          <paper-menu-button>
+            <paper-icon-button
+                icon="menu"
+                class="dropdown-trigger">
+            </paper-icon-button>
+            <paper-menu class="dropdown-content">
+              <paper-item on-tap="reload">Reload Files</paper-item>
+            </paper-menu>
+          </paper-menu-button>
           <div title>Pilot</div>
-          <p class="now-playing">
+          <p class$="now-playing {{hideIfNotPlaying(playing)}}">
             <span>Now Playing:</span>
             {{playing}}
           </p>
-          <!--p class$="position {{hidePosition(playing)}}">
+          <p class$="position {{hideIfNotPlaying(playing)}}">
             {{formatDuration(position)}}
             /
             {{formatDuration(duration)}}
-          </p-->
+          </p>
           <span class="divider"></span>
           <div class="controls">
             <paper-icon-button
@@ -165,7 +179,7 @@
         }
       },
 
-      hidePosition: function(playing) {
+      hideIfNotPlaying: function(playing) {
         return playing == '' ? 'hidden' : '';
       },
 
@@ -215,6 +229,10 @@
         this.rpc('Seek', {seconds: 60});
       },
 
+      reload: function() {
+        this.rpc('Reload');
+      },
+
       rpc: function() {
         var params = arguments[1];
         if (!params) {
@@ -235,6 +253,9 @@
         this.cecErr = r.cec_err;
         this.position = r.position;
         this.duration = r.duration;
+        if (r.num_files) {
+          this.$.files.generateRequest();
+        }
       }
 
     });

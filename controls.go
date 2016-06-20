@@ -78,7 +78,7 @@ func (s *server) Seek(r *http.Request, req *SeekRequest, resp *StatusResponse) e
 }
 
 type ReloadResponse struct {
-	*StatusResponse
+	StatusResponse
 	NumFiles int `json:"num_files"`
 }
 
@@ -88,6 +88,6 @@ func (s *server) Reload(r *http.Request, req *EmptyRequest, resp *ReloadResponse
 	s.filesHash = calculateHash(files)
 	s.Files = files
 	resp.NumFiles = len(s.Files)
-	s.fillStatus(resp.StatusResponse)
+	s.fillStatus(&resp.StatusResponse)
 	return nil
 }
