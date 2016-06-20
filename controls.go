@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/rpc"
 	"github.com/gorilla/rpc/json"
@@ -23,16 +24,21 @@ type StatusResponse struct {
 	Playing  string `json:"playing"`
 	Paused   bool   `json:"paused"`
 	CECErr   error  `json:"cec_err"`
-	Position int64  `json:"position"`
-	Duration int64  `json:"duration"`
+	Position int64  `json:"position"` // in milliseconds
+	Duration int64  `json:"duration"` // in milliseconds
 }
 
 func (s *server) fillStatus(r *StatusResponse) {
 	r.Playing = s.TV.Playing()
 	r.Paused = s.TV.Paused()
 	r.CECErr = s.TV.CECErr()
-	r.Position = s.TV.Position()
-	r.Duration = s.TV.Duration()
+	r.Position = int64(s.TV.Position() / time.Millisecond)
+	r.Duration = int64(s.TV.Duration() / time.Millisecond)
+}
+
+func (s *server) Status(r *http.Request, req *EmptyRequest, resp *StatusResponse) error {
+	s.fillStatus(resp)
+	return nil
 }
 
 type PlayRequest struct {
@@ -68,11 +74,11 @@ func (s *server) Stop(r *http.Request, req *EmptyRequest, resp *StatusResponse) 
 }
 
 type SeekRequest struct {
-	Seconds int `json:"seconds"`
+	Milliseconds int `json:"milliseconds"`
 }
 
 func (s *server) Seek(r *http.Request, req *SeekRequest, resp *StatusResponse) error {
-	err := s.TV.Seek(req.Seconds)
+	err := s.TV.Seek(time.Duration(req.Milliseconds) * time.Millisecond)
 	s.fillStatus(resp)
 	return err
 }

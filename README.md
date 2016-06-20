@@ -1,5 +1,3 @@
-## Feature List
-  * Fast forward/rewind
-  * Skip to time
+## TODO List
   * Search
   * Filter play in browser to supported filetypes

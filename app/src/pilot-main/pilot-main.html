@@ -11,6 +11,7 @@
 <link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
 <link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
 <link rel="import" href="../../bower_components/paper-item/paper-item.html">
+<link rel="import" href="../../bower_components/iron-flex-layout/iron-flex-layout-classes.html">
 
 <dom-module id="pilot-main">
   <template>
@@ -27,7 +28,7 @@
       }
       .now-playing {
         margin-right: 16px;
-        font-size: 12pt;
+        font-size: 10pt;
       }
       .now-playing span {
         color: var(--paper-yellow-300);
@@ -38,13 +39,33 @@
       }
       .position {
         margin-right: 16px;
+        font-size: 10pt;
       }
       .divider {
         height: 100%;
         border-right: 2px solid white;
       }
-      .controls {
+      .buttons {
         margin-left: 16px;
+      }
+      .controls {
+        height: 100%;
+        @apply(--layout-horizontal);
+        @apply(--layout-center);
+        @apply(--layout-wrap);
+      }
+      @media (max-width: 800px) {
+        app-toolbar {
+          @apply(--layout-wrap);
+          height: auto;
+        }
+        .divider {
+          display: none;
+        }
+        .buttons {
+          @apply(--layout-self-center);
+          margin: 0;
+        }
       }
     </style>
 
@@ -81,43 +102,45 @@
             </paper-menu>
           </paper-menu-button>
           <div title>Pilot</div>
-          <p class$="now-playing {{hideIfNotPlaying(playing)}}">
-            <span>Now Playing:</span>
-            {{playing}}
-          </p>
-          <p class$="position {{hideIfNotPlaying(playing)}}">
-            {{formatDuration(position)}}
-            /
-            {{formatDuration(duration)}}
-          </p>
-          <span class="divider"></span>
           <div class="controls">
-            <paper-icon-button
-                icon="av:skip-previous"
-                on-tap="rewind"
-                disabled$="{{disableControl(playing)}}">
-            </paper-icon-button>
-            <paper-icon-button
-                icon="av:stop"
-                on-tap="stop"
-                disabled$="{{disableControl(playing)}}">
-            </paper-icon-button>
-            <paper-icon-button
-                icon="av:play-arrow"
-                on-tap="play"
-                hidden$="{{hidePlay(playing, paused)}}"
-                disabled$="{{disableControl(playing)}}">
-            </paper-icon-button>
-            <paper-icon-button
-                icon="av:pause"
-                on-tap="pause"
-                hidden$="{{hidePause(playing, paused)}}">
-            </paper-icon-button>
-            <paper-icon-button
-                icon="av:skip-next"
-                on-tap="fastForward"
-                disabled$="{{disableControl(playing)}}">
-            </paper-icon-button>
+            <p class$="now-playing {{hideIfNotPlaying(playing)}}">
+              <span>Now Playing:</span>
+              {{playing}}
+            </p>
+            <p class$="position {{hideIfNotPlaying(playing)}}">
+              {{formatDuration(position)}}
+              /
+              {{formatDuration(duration)}}
+            </p>
+            <span class="divider"></span>
+            <div class="buttons">
+              <paper-icon-button
+                  icon="av:skip-previous"
+                  on-tap="rewind"
+                  disabled$="{{disableControl(playing)}}">
+              </paper-icon-button>
+              <paper-icon-button
+                  icon="av:stop"
+                  on-tap="stop"
+                  disabled$="{{disableControl(playing)}}">
+              </paper-icon-button>
+              <paper-icon-button
+                  icon="av:play-arrow"
+                  on-tap="play"
+                  hidden$="{{hidePlay(playing, paused)}}"
+                  disabled$="{{disableControl(playing)}}">
+              </paper-icon-button>
+              <paper-icon-button
+                  icon="av:pause"
+                  on-tap="pause"
+                  hidden$="{{hidePause(playing, paused)}}">
+              </paper-icon-button>
+              <paper-icon-button
+                  icon="av:skip-next"
+                  on-tap="fastForward"
+                  disabled$="{{disableControl(playing)}}">
+              </paper-icon-button>
+            </div>
           </div>
         </app-toolbar>
       </app-header>
@@ -176,7 +199,18 @@
         duration: {
           type: Number,
           value: 0
+        },
+        windowWidth: {
+          type: Number,
+          value: 1436
         }
+      },
+
+      ready: function() {
+        this.status();
+        window.onresize = function() {
+          this.windowWidth = window.innerWidth;
+        }.bind(this);
       },
 
       hideIfNotPlaying: function(playing) {
@@ -188,7 +222,7 @@
       },
 
       hidePlay: function(playing, paused) {
-        return playing != '' && paused;
+        return playing != '' && !paused;
       },
 
       hidePause: function(playing, paused) {
@@ -196,7 +230,7 @@
       },
 
       formatDuration(duration) {
-        return moment.utc(duration/1000.0).format('mm:ss');
+        return moment.utc(duration).format('mm:ss');
       },
 
       playOnTV: function(event) {
@@ -207,6 +241,10 @@
       playInBrowser: function(event) {
         event.preventDefault();
         console.log(event.model.file);
+      },
+
+      status: function() {
+        this.rpc('Status');
       },
 
       play: function() {
@@ -222,11 +260,11 @@
       },
 
       rewind: function() {
-        this.rpc('Seek', {seconds: -60});
+        this.rpc('Seek', {milliseconds: -60 * 1000}); // back 60 seconds
       },
 
       fastForward: function() {
-        this.rpc('Seek', {seconds: 60});
+        this.rpc('Seek', {milliseconds: 60 * 1000}); // ahead 60 seconds
       },
 
       reload: function() {

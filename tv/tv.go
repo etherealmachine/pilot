@@ -17,9 +17,9 @@ type TV interface {
 	Play(filename string) error
 	Pause() error
 	Stop() error
-	Seek(seconds int) error
-	Position() int64
-	Duration() int64
+	Seek(d time.Duration) error
+	Position() time.Duration
+	Duration() time.Duration
 }
 
 type tv struct {
@@ -98,20 +98,20 @@ func (tv *tv) CECErr() error {
 	return tv.cecErr
 }
 
-func (tv *tv) Position() int64 {
+func (tv *tv) Position() time.Duration {
 	if tv.player == nil {
 		return 0
 	}
 	position, _ := tv.player.Position()
-	return position
+	return time.Duration(position) * time.Microsecond
 }
 
-func (tv *tv) Duration() int64 {
+func (tv *tv) Duration() time.Duration {
 	if tv.player == nil {
 		return 0
 	}
 	duration, _ := tv.player.Duration()
-	return duration
+	return time.Duration(duration) * time.Microsecond
 }
 
 func (tv *tv) Play(filename string) error {
@@ -161,12 +161,10 @@ func (tv *tv) Stop() error {
 	return nil
 }
 
-func (tv *tv) Seek(seconds int) error {
+func (tv *tv) Seek(d time.Duration) error {
 	if tv.player == nil {
 		return nil
 	}
-	_, err := tv.player.Seek(int64(
-		time.Duration(seconds) *
-			(time.Second / time.Microsecond)))
+	_, err := tv.player.Seek(int64(d / time.Microsecond))
 	return err
 }
