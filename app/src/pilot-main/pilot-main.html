@@ -196,7 +196,7 @@
       },
 
       formatDuration(duration) {
-        return moment.utc(duration).format('mm:ss');
+        return moment.utc(duration/1000.0).format('mm:ss');
       },
 
       playOnTV: function(event) {
