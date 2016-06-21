@@ -28,17 +28,28 @@
       is: 'pilot-play',
 
       properties: {
-        file: String
+        file: {
+          type: String,
+          observer: '_fileChanged'
+        },
+        selected: Boolean
       },
 
       ready: function() {
-        this.parentNode.addEventListener("iron-select", this.ironSelect.bind(this));
+        this.parentNode.addEventListener("iron-select", this._ironSelect.bind(this));
       },
 
-      ironSelect: function(event) {
-        if (event.detail.item != this) {
+      _ironSelect: function(event) {
+        this.selected = event.detail.item == this;
+        if (!this.selected) {
           this.$.video.src = '';
-        } else {
+        } else if (this.file) {
+          this.$.video.src = '/download?file='+this.file;
+        }
+      },
+
+      _fileChanged: function() {
+        if (this.selected) {
           this.$.video.src = '/download?file='+this.file;
         }
       }
