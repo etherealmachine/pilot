@@ -1,4 +1,4 @@
-<link rel="import" href="../../bower_components/polymer/polymer.html">
+<link rel="import" href="/bower_components/polymer/polymer.html">
 
 <dom-module id="pilot-list">
   <template>
@@ -12,9 +12,9 @@
       <p>
         {{file}}
         <br>
-        <a href="#" on-tap="playOnTV">Play on TV</a>
+        <a href="" on-tap="playOnTV">Play on TV</a>
         <br>
-        <a href="#" on-tap="playInBrowser">Play in Browser</a>
+        <a href="/play/{{encodeURI(file)}}">Play in Browser</a>
         <br>
         <a href="/download?file={{file}}">Download</a>
       </p>
@@ -31,16 +31,14 @@
         files: Array
       },
 
+      encodeURI: function(s) {
+        return encodeURIComponent(s);
+      },
+
       playOnTV: function(event) {
         event.preventDefault();
         this.fire('rpc',
           {method: 'Play', params: {file: event.model.file}});
-      },
-
-      playInBrowser: function(event) {
-        event.preventDefault();
-        this.fire('page',
-          {path: 'Play', params: {file: event.model.file}});
       }
 
     });

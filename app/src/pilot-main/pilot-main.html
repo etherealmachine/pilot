@@ -1,19 +1,30 @@
-<link rel="import" href="../../bower_components/polymer/polymer.html">
-<link rel="import" href="../../bower_components/iron-ajax/iron-ajax.html">
-<link rel="import" href="../../bower_components/app-layout/app-header-layout/app-header-layout.html">
-<link rel="import" href="../../bower_components/app-layout/app-header/app-header.html">
-<link rel="import" href="../../bower_components/app-layout/app-toolbar/app-toolbar.html">
-<link rel="import" href="../../bower_components/app-layout/app-scroll-effects/effects/waterfall.html">
-<link rel="import" href="../../bower_components/paper-styles/color.html">
-<link rel="import" href="../../bower_components/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="../../bower_components/iron-icons/iron-icons.html">
-<link rel="import" href="../../bower_components/iron-icons/av-icons.html">
-<link rel="import" href="../../bower_components/paper-menu/paper-menu.html">
-<link rel="import" href="../../bower_components/paper-menu-button/paper-menu-button.html">
-<link rel="import" href="../../bower_components/paper-item/paper-item.html">
-<link rel="import" href="../../bower_components/iron-flex-layout/iron-flex-layout-classes.html">
-<link rel="import" href="../pilot-controls/pilot-controls.html">
-<link rel="import" href="../pilot-list/pilot-list.html">
+<link rel="import" href="/bower_components/polymer/polymer.html">
+
+<!-- App -->
+<link rel="import" href="/bower_components/app-layout/app-header-layout/app-header-layout.html">
+<link rel="import" href="/bower_components/app-layout/app-header/app-header.html">
+<link rel="import" href="/bower_components/app-layout/app-scroll-effects/effects/waterfall.html">
+<link rel="import" href="/bower_components/app-layout/app-toolbar/app-toolbar.html">
+<link rel="import" href="/bower_components/app-route/app-location.html">
+<link rel="import" href="/bower_components/app-route/app-route.html">
+
+<!-- Iron -->
+<link rel="import" href="/bower_components/iron-ajax/iron-ajax.html">
+<link rel="import" href="/bower_components/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="/bower_components/iron-icons/iron-icons.html">
+<link rel="import" href="/bower_components/iron-pages/iron-pages.html">
+
+<!-- Paper -->
+<link rel="import" href="/bower_components/paper-styles/color.html">
+<link rel="import" href="/bower_components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="/bower_components/paper-menu/paper-menu.html">
+<link rel="import" href="/bower_components/paper-menu-button/paper-menu-button.html">
+<link rel="import" href="/bower_components/paper-item/paper-item.html">
+
+<!-- Pilot -->
+<link rel="import" href="/src/pilot-controls/pilot-controls.html">
+<link rel="import" href="/src/pilot-list/pilot-list.html">
+<link rel="import" href="/src/pilot-play/pilot-play.html">
 
 <dom-module id="pilot-main">
   <template>
@@ -34,6 +45,17 @@
         @apply(--layout-center);
         @apply(--layout-wrap);
       }
+      .title-link {
+        pointer-events: initial;
+        color: white;
+        text-decoration: none;
+      }
+      .title-link:hover {
+        text-decoration: underline;
+      }
+      .breadcrumb {
+        font-size: 80%;
+      }
       @media (max-width: 800px) {
         app-toolbar {
           @apply(--layout-wrap);
@@ -48,7 +70,6 @@
         url="/files.json"
         handle-as="json"
         last-response="{{files}}"
-        loading="{{loading}}"
         debounce-duration="300">
     </iron-ajax>
 
@@ -74,7 +95,9 @@
               <paper-item on-tap="reload">Reload Files</paper-item>
             </paper-menu>
           </paper-menu-button>
-          <div title>Pilot</div>
+          <div title>
+            <a class="title-link" href="/">Pilot</a>
+          </div>
           <pilot-controls
               class="controls"
               playing="[[state.playing]]"
@@ -87,17 +110,41 @@
         </app-toolbar>
       </app-header>
 
-      <pilot-list
-          class="container"
-          files="[[files]]"
-          on-rpc="onRPC"
-          on-page="onPage">
-      </pilot-list>
+      <app-location
+          route="{{route}}">
+      </app-location>
+      <app-route
+          route="{{route}}"
+          pattern="/:page"
+          data="{{routeData}}"
+          tail="{{subroute}}">
+      </app-route>
+      <app-route
+          route="{{subroute}}"
+          pattern="/:file"
+          data="{{subrouteData}}">
+      </app-route>
+
+      <iron-pages
+          attr-for-selected="id"
+          fallback-selection="index"
+          selected="[[routeData.page]]">
+        <pilot-list
+            id="index"
+            class="container"
+            files="[[files]]"
+            on-rpc="onRPC">
+        </pilot-list>
+        <pilot-play
+            id="play"
+            file="[[subrouteData.file]]">
+        </pilot-play>
+      </iron-pages>
     </app-header-layout>
 
   </template>
 
-  <script src="../../bower_components/moment/min/moment.min.js">
+  <script src="/bower_components/moment/min/moment.min.js">
   </script>
   <script>
     Polymer({
@@ -117,7 +164,17 @@
               duration: 0
             };
           }
-        }
+        },
+        route: Object,
+        routeData: {
+          type: Object,
+          value: function() {
+            return {
+              page: 'index'
+            };
+          }
+        },
+        subrouteData: Object
       },
 
       ready: function() {
@@ -128,11 +185,12 @@
         this.rpc('Reload');
       },
 
-      onRPC: function(event) {
-        this.rpc(event.detail.method, event.detail.params);
+      decodeURI: function(s) {
+        return decodeURIComponent(s);
       },
 
-      onPage: function(event) {
+      onRPC: function(event) {
+        this.rpc(event.detail.method, event.detail.params);
       },
 
       rpc: function() {

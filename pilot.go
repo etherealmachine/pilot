@@ -207,32 +207,35 @@ func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/" {
-		if h := r.Header.Get("If-None-Match"); h != "" && h == s.indexHash {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		bs, err := ioutil.ReadFile("index.html")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write(bs)
-			return
-		}
-		h := sha256.New()
-		h.Write(bs)
-		encodedBytes := new(bytes.Buffer)
-		encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
-		encoder.Write(h.Sum(nil))
-		encoder.Close()
-		s.indexHash = encodedBytes.String()
-		w.Header().Set("Content-Type", "text/html")
-		w.Header().Set("Cache-Control", "max-age=31536000")
-		w.Header().Set("ETag", s.indexHash)
+	if h := r.Header.Get("If-None-Match"); h != "" && h == s.indexHash {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	bs, err := ioutil.ReadFile("index.html")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write(bs)
 		return
 	}
-	w.WriteHeader(http.StatusNotFound)
-	w.Write([]byte("404 Page Not Found"))
+	h := sha256.New()
+	h.Write(bs)
+	encodedBytes := new(bytes.Buffer)
+	encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
+	encoder.Write(h.Sum(nil))
+	encoder.Close()
+	s.indexHash = encodedBytes.String()
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Cache-Control", "max-age=31536000")
+	w.Header().Set("ETag", s.indexHash)
+	w.Write(bs)
+}
+
+func (s *server) UnvulcanizedHandler(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/src") || strings.HasPrefix(r.URL.Path, "/bower_components") {
+		http.ServeFile(w, r, filepath.Join("app", r.URL.Path))
+		return
+	}
+	http.ServeFile(w, r, "app/index.html")
 }
 
 func main() {
@@ -273,7 +276,7 @@ func main() {
 	http.HandleFunc("/files.json", s.FilesHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
 	if *unvulcanized {
-		http.Handle("/", http.FileServer(http.Dir("app")))
+		http.HandleFunc("/", s.UnvulcanizedHandler)
 	} else {
 		http.HandleFunc("/", s.IndexHandler)
 	}

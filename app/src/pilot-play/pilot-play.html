@@ -1,12 +1,25 @@
-<link rel="import" href="../../bower_components/polymer/polymer.html">
+<link rel="import" href="/bower_components/polymer/polymer.html">
+
+<!-- Iron -->
+<link rel="import" href="/bower_components/iron-flex-layout/iron-flex-layout-classes.html">
 
 <dom-module id="pilot-play">
   <template>
     <style>
       :host {
         display: block;
+        @apply(--layout-vertical);
+      }
+      video {
+        @apply(--layout-center-justified);
       }
     </style>
+
+    <video
+        id="video"
+        controls
+        autoplay>
+    </video>
   </template>
 
   <script>
@@ -15,6 +28,19 @@
       is: 'pilot-play',
 
       properties: {
+        file: String
+      },
+
+      ready: function() {
+        this.parentNode.addEventListener("iron-select", this.ironSelect.bind(this));
+      },
+
+      ironSelect: function(event) {
+        if (event.detail.item != this) {
+          this.$.video.src = '';
+        } else {
+          this.$.video.src = '/download?file='+this.file;
+        }
       }
 
     });
