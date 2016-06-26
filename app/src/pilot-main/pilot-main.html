@@ -15,11 +15,13 @@
 <link rel="import" href="/bower_components/iron-pages/iron-pages.html">
 
 <!-- Paper -->
-<link rel="import" href="/bower_components/paper-styles/color.html">
 <link rel="import" href="/bower_components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="/bower_components/paper-item/paper-item.html">
 <link rel="import" href="/bower_components/paper-menu/paper-menu.html">
 <link rel="import" href="/bower_components/paper-menu-button/paper-menu-button.html">
-<link rel="import" href="/bower_components/paper-item/paper-item.html">
+<link rel="import" href="/bower_components/paper-spinner/paper-spinner.html">
+<link rel="import" href="/bower_components/paper-styles/color.html">
+<link rel="import" href="/bower_components/paper-toast/paper-toast.html">
 
 <!-- Pilot -->
 <link rel="import" href="/src/pilot-controls/pilot-controls.html">
@@ -56,6 +58,9 @@
       .breadcrumb {
         font-size: 80%;
       }
+      paper-spinner {
+        padding: 14px;
+      }
       @media (max-width: 800px) {
         app-toolbar {
           @apply(--layout-wrap);
@@ -86,7 +91,8 @@
 
       <app-header fixed condenses effects="waterfall">
         <app-toolbar>
-          <paper-menu-button>
+          <paper-spinner active$="[[rpcInProgress]]" hidden$="[[!rpcInProgress]]"></paper-spinner>
+          <paper-menu-button hidden$="[[rpcInProgress]]">
             <paper-icon-button
                 icon="menu"
                 class="dropdown-trigger">
@@ -100,6 +106,7 @@
           </div>
           <pilot-controls
               class="controls"
+              disabled="[[rpcInProgress]]"
               playing="[[state.playing]]"
               paused="[[state.paused]]"
               cec-err="[[state.cecErr]]"
@@ -134,6 +141,7 @@
             id="index"
             class="container"
             files="[[files]]"
+            disabled="[[rpcInProgress]]"
             on-rpc="onRPC">
         </pilot-list>
         <pilot-play
@@ -141,6 +149,8 @@
             file="[[subrouteData.file]]">
         </pilot-play>
       </iron-pages>
+
+      <paper-toast text="[[error]]" opened$="[[error]]"></paper-toast>
     </app-header-layout>
 
   </template>
@@ -175,7 +185,9 @@
             };
           }
         },
-        subrouteData: Object
+        subrouteData: Object,
+        rpcInProgress: Boolean,
+        error: String
       },
 
       ready: function() {
@@ -195,6 +207,7 @@
       },
 
       rpc: function() {
+        this.rpcInProgress = true;
         var params = arguments[1];
         if (!params) {
           params = {};
@@ -208,11 +221,17 @@
       },
 
       handleResponse: function(resp) {
-        var r = resp.target.lastResponse.result;
-        this.state = r;
-        if (r.num_files) {
-          document.getElementById('files-ajax').generateRequest();
+        if (resp.target.lastResponse.error) {
+          this.error = resp.target.lastResponse.error;
         }
+        if (resp.target.lastResponse.result) {
+          var r = resp.target.lastResponse.result;
+          this.state = r;
+          if (r.num_files) {
+            document.getElementById('files-ajax').generateRequest();
+          }
+        }
+        this.rpcInProgress = false;
       }
 
     });

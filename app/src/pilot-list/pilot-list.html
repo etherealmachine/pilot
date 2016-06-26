@@ -1,10 +1,17 @@
 <link rel="import" href="/bower_components/polymer/polymer.html">
 
+<!-- Paper -->
+<link rel="import" href="/bower_components/paper-styles/color.html">
+
 <dom-module id="pilot-list">
   <template>
     <style>
       :host {
         display: block;
+      }
+      a.disabled {
+        pointer-events: none;
+        color: var(--paper-grey-500);
       }
     </style>
 
@@ -12,11 +19,11 @@
       <p>
         {{file}}
         <br>
-        <a href="" on-tap="playOnTV">Play on TV</a>
+        <a href="" on-tap="playOnTV" class$="[[disabledLink(disabled)]]">Play on TV</a>
         <br>
-        <a href="/play/{{encodeURI(file)}}">Play in Browser</a>
+        <a href="/play/{{encodeURI(file)}}" class$="[[disabledLink(disabled)]]">Play in Browser</a>
         <br>
-        <a href="/download?file={{encodeURI(file)}}">Download</a>
+        <a href="/download?file={{encodeURI(file)}}" class$="[[disabledLink(disabled)]]">Download</a>
       </p>
     </template>
 
@@ -28,11 +35,19 @@
       is: 'pilot-list',
 
       properties: {
-        files: Array
+        files: Array,
+        disabled: {
+          type: Boolean,
+          value: false
+        }
       },
 
       encodeURI: function(s) {
         return encodeURIComponent(s);
+      },
+
+      disabledLink: function(disabled) {
+        return disabled ? 'disabled' : '';
       },
 
       playOnTV: function(event) {

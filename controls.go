@@ -95,5 +95,8 @@ func (s *server) Reload(r *http.Request, req *EmptyRequest, resp *ReloadResponse
 	s.Files = files
 	resp.NumFiles = len(s.Files)
 	s.fillStatus(&resp.StatusResponse)
+	if *mocktv {
+		time.Sleep(2 * time.Second)
+	}
 	return nil
 }
