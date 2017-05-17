@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -60,6 +61,7 @@ var video = map[string]bool{
 }
 
 type server struct {
+	sync.RWMutex
 	Files     []string
 	filesHash string
 	indexHash string
@@ -186,12 +188,14 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
+	s.RLock()
+	defer s.RUnlock()
 	if h := r.Header.Get("If-None-Match"); h != "" && h == s.filesHash {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "max-age=31536000")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("ETag", s.filesHash)
 	bs, err := json.Marshal(s.Files)
 	if err != nil {
@@ -266,8 +270,10 @@ func main() {
 	}
 
 	log.Println("pilot is up, looking for files to serve...")
+	s.Lock()
 	filepath.Walk(*root, walker(&s.Files))
 	s.filesHash = calculateHash(s.Files)
+	s.Unlock()
 	log.Printf("found %d files", len(s.Files))
 
 	http.Handle("/controls", rpcServer(s))

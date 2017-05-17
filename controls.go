@@ -91,8 +91,10 @@ type ReloadResponse struct {
 func (s *server) Reload(r *http.Request, req *EmptyRequest, resp *ReloadResponse) error {
 	var files []string
 	filepath.Walk(*root, walker(&files))
+	s.Lock()
 	s.filesHash = calculateHash(files)
 	s.Files = files
+	s.Unlock()
 	resp.NumFiles = len(s.Files)
 	s.fillStatus(&resp.StatusResponse)
 	if *mocktv {
