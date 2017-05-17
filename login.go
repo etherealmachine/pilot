@@ -23,19 +23,22 @@ type LoginCookie struct {
 	LoginTime time.Time
 }
 
-func getLoginCookie(r *http.Request) (*LoginCookie, bool) {
+func hasCookieOrPassword(r *http.Request) bool {
 	if *password == "" {
-		return &LoginCookie{}, true
+		return true
 	}
 	cookie, err := r.Cookie("login")
 	if err != nil {
-		log.Printf("no login cookie: %v", err)
-		return nil, false
+		if *password == r.FormValue("password") {
+			return true
+	  }
+		log.Printf("no login cookie or password: %v", err)
+		return false
 	}
 	loginCookie := new(LoginCookie)
 	if err = bakery.Decode("login", cookie.Value, loginCookie); err != nil {
 		log.Printf("error decoding login cookie: %v", err)
-		return nil, false
+		return false
 	}
-	return loginCookie, true
+	return true
 }

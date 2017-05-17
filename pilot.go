@@ -97,7 +97,7 @@ func walker(files *[]string) func(string, os.FileInfo, error) error {
 func (s *server) authenticate(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/login" {
-			if _, ok := getLoginCookie(r); !ok {
+			if !hasCookieOrPassword(r) {
 				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 				return
 			}
@@ -146,7 +146,7 @@ func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	if _, ok := getLoginCookie(r); ok {
+	if hasCookieOrPassword(r) {
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
