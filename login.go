@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/securecookie"
@@ -23,22 +24,20 @@ type LoginCookie struct {
 	LoginTime time.Time
 }
 
-func hasCookieOrPassword(r *http.Request) bool {
-	if *password == "" {
-		return true
-	}
+func hasLoginCookie(r *http.Request) bool {
 	cookie, err := r.Cookie("login")
 	if err != nil {
-		if *password == r.FormValue("password") {
-			return true
-	  }
-		log.Printf("no login cookie or password: %v", err)
 		return false
 	}
 	loginCookie := new(LoginCookie)
-	if err = bakery.Decode("login", cookie.Value, loginCookie); err != nil {
+	if err = bakery.Decode("login", cookie.Value, loginCookie); err == nil {
+		return true
+	} else {
 		log.Printf("error decoding login cookie: %v", err)
-		return false
 	}
-	return true
+	return false
+}
+
+func passwordProtectedDownload(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/download") && r.FormValue("password") == *password
 }

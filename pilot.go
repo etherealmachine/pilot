@@ -96,13 +96,21 @@ func walker(files *[]string) func(string, os.FileInfo, error) error {
 
 func (s *server) authenticate(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/login" {
-			if !hasCookieOrPassword(r) {
-				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
-				return
-			}
+		if *password == "" {
+			handler.ServeHTTP(w, r)
+			return
 		}
-		handler.ServeHTTP(w, r)
+		if hasLoginCookie(r) || passwordProtectedDownload(r) {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == "/" {
+			s.LoginHandler(w, r)
+			return
+		} else {
+			http.NotFound(w, r)
+			return
+		}
 	})
 }
 
@@ -146,22 +154,7 @@ func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	if hasCookieOrPassword(r) {
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		return
-	}
 	pass := r.FormValue("password")
-	if pass == "" {
-		if err := loginTemplate.Execute(w, &struct {
-			Error      bool
-			RedirectTo string
-		}{
-			RedirectTo: r.URL.Path,
-		}); err != nil {
-			log.Println(err)
-		}
-		return
-	}
 	if pass == *password {
 		encoded, err := bakery.Encode("login", &LoginCookie{LoginTime: time.Now()})
 		if err != nil {
@@ -174,14 +167,13 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 			Value: encoded,
 			Path:  "/",
 		})
-		http.Redirect(w, r, r.FormValue("redirect_to"), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusFound)
 	}
+	w.WriteHeader(http.StatusFound)
 	if err := loginTemplate.Execute(w, &struct {
 		Error      bool
-		RedirectTo string
 	}{
-		Error:      true,
-		RedirectTo: r.URL.Path,
+		Error:      pass != "",
 	}); err != nil {
 		log.Println(err)
 	}
@@ -277,7 +269,6 @@ func main() {
 	log.Printf("found %d files", len(s.Files))
 
 	http.Handle("/controls", rpcServer(s))
-	http.HandleFunc("/login", s.LoginHandler)
 	http.HandleFunc("/download", s.DownloadHandler)
 	http.HandleFunc("/files.json", s.FilesHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
