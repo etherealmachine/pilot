@@ -19,11 +19,17 @@
       <p>
         {{file}}
         <br>
-        <a href="" on-tap="playOnTV" class$="[[disabledLink(disabled)]]">Play on TV</a>
+        <a
+            href=""
+            on-tap="playOnTV" class$="[[disabledLink(disabled)]]">Play on TV</a>
         <br>
-        <a href="/play/{{encodeURI(file)}}" class$="[[disabledLink(disabled)]]">Play in Browser</a>
+        <a
+            href="/play?file={{encodeURI(file)}}"
+            class$="[[disabledLink(disabled)]]">Play in Browser</a>
         <br>
-        <a href="/download?file={{encodeURI(file)}}" class$="[[disabledLink(disabled)]]">Download</a>
+        <a
+            href="/download?file={{encodeURI(file)}}"
+            class$="[[disabledLink(disabled)]]">Download</a>
       </p>
     </template>
 

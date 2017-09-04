@@ -122,15 +122,11 @@
           route="{{route}}">
       </app-location>
       <app-route
+          id="foo"
           route="{{route}}"
           pattern="/:page"
           data="{{routeData}}"
-          tail="{{subroute}}">
-      </app-route>
-      <app-route
-          route="{{subroute}}"
-          pattern="/:file"
-          data="{{subrouteData}}">
+          query-params="{{queryParams}}">
       </app-route>
 
       <iron-pages
@@ -146,7 +142,7 @@
         </pilot-list>
         <pilot-play
             id="play"
-            file="[[subrouteData.file]]">
+            file="[[queryParams.file]]">
         </pilot-play>
       </iron-pages>
 
