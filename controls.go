@@ -54,7 +54,7 @@ func (s *server) Play(r *http.Request, req *PlayRequest, resp *StatusResponse) e
 		}
 	}
 	if !found {
-		return fmt.Errorf("no file named %q found", video)
+		return fmt.Errorf("no file named %q found", req.File)
 	}
 	err := s.TV.Play(req.File)
 	s.fillStatus(resp)

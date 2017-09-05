@@ -30,6 +30,7 @@ var (
 	logdir       = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
 	mocktv       = flag.Bool("mocktv", false, "Use mock TV for testing.")
 	unvulcanized = flag.Bool("unvulcanized", false, "Serve unvulcanized app for testing.")
+	filesjson    = flag.String("filesjson", "", "Serve given file as files.json for testing.")
 
 	httplog *log.Logger
 )
@@ -171,9 +172,9 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusFound)
 	if err := loginTemplate.Execute(w, &struct {
-		Error      bool
+		Error bool
 	}{
-		Error:      pass != "",
+		Error: pass != "",
 	}); err != nil {
 		log.Println(err)
 	}
@@ -182,6 +183,26 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
 	s.RLock()
 	defer s.RUnlock()
+	if *filesjson != "" {
+		f, err := os.Open(*filesjson)
+		if err != nil {
+			if os.IsNotExist(err) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		http.ServeContent(w, r, *filesjson, fi.ModTime(), f)
+		return
+	}
 	if h := r.Header.Get("If-None-Match"); h != "" && h == s.filesHash {
 		w.WriteHeader(http.StatusNotModified)
 		return

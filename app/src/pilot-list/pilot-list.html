@@ -1,6 +1,7 @@
 <link rel="import" href="/bower_components/polymer/polymer.html">
 
 <!-- Paper -->
+<link rel="import" href="/bower_components/paper-input/paper-input.html">
 <link rel="import" href="/bower_components/paper-styles/color.html">
 
 <dom-module id="pilot-list">
@@ -15,7 +16,19 @@
       }
     </style>
 
-    <template is="dom-repeat" items="[[files]]" as="file">
+    <paper-input
+        label="Search"
+        value="{{query}}"
+        autofocus>
+    </paper-input>
+    <template
+        id="filelist"
+        is="dom-repeat"
+        items="[[files]]"
+        as="file"
+        filter="_queryFilter"
+        initial-count="10"
+        target-framerate="60">
       <p>
         {{file}}
         <br>
@@ -41,25 +54,39 @@
       is: 'pilot-list',
 
       properties: {
-        files: Array,
+        files: {
+          type: Array
+        },
         disabled: {
           type: Boolean,
           value: false
+        },
+        query: {
+          type: String,
+          observer: '_onQueryChanged'
         }
       },
 
-      encodeURI: function(s) {
+      encodeURI(s) {
         return encodeURIComponent(s);
       },
 
-      disabledLink: function(disabled) {
+      disabledLink(disabled) {
         return disabled ? 'disabled' : '';
       },
 
-      playOnTV: function(event) {
+      playOnTV(event) {
         event.preventDefault();
         this.fire('rpc',
           {method: 'Play', params: {file: event.model.file}});
+      },
+
+      _queryFilter(fname) {
+        return !this.query || fname.toLowerCase().includes(this.query.toLowerCase());
+      },
+
+      _onQueryChanged(newQuery, oldQuery) {
+        this.$.filelist.render();
       }
 
     });
