@@ -24337,7 +24337,10 @@ within `fitInto` boundaries, while preserving the element's CSS margin values.
       },
 
       formatDuration(duration) {
-        return moment.utc(duration).format('mm:ss');
+        const seconds = Math.floor(duration / 1000) % 360;
+        const minutes = Math.floor(duration / 1000 / 60) % 60;
+        const hours = Math.floor(duration / 1000 / 60 / 60);
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
       },
 
       play: function() {

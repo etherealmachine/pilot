@@ -1,13 +1,14 @@
 package tv
 
 import (
+	"fmt"
 	"log"
-	"os/exec"
+	"net/url"
 	"path/filepath"
 	"time"
 
 	"github.com/etherealmachine/cec"
-	"github.com/etherealmachine/omxplayer"
+	vlc "github.com/CedArctic/go-vlc-ctrl"
 )
 
 type TV interface {
@@ -23,21 +24,28 @@ type TV interface {
 }
 
 type tv struct {
-	playing string
 	cecErr  error
 	root    string
-	player  *omxplayer.Player
+	player  *vlc.VLC
 }
 
 // New returns a new TV.
-func New(root string) TV {
+func New(root string) (TV, error) {
+	player, err := vlc.NewVLC("127.0.0.1", 8081, "raspberry")
+	if err != nil {
+		return nil, err
+	}
+	if _, err = player.GetStatus(); err != nil {
+		return nil, fmt.Errorf("Error, expected VLC on port 8081, got: %s", err)
+	}
 	t := &tv{
 		root: root,
+		player: &player,
 	}
 	conn, err := cec.Open("", "pilot")
 	if err != nil {
 		t.cecErr = err
-		return t
+		return t, err
 	}
 	conn.On(cec.Pause, func() {
 		if err := t.Pause(); err != nil {
@@ -52,46 +60,48 @@ func New(root string) TV {
 		}
 	})
 	conn.On(cec.Stop, func() {
-		if t.player != nil && t.playing != "" {
-			if err := t.Stop(); err != nil {
-				log.Println(err)
-				t.cecErr = err
-			}
+		if err := t.Stop(); err != nil {
+			log.Println(err)
+			t.cecErr = err
 		}
 	})
 	conn.On(cec.FastForward, func() {
-		if t.player != nil && t.playing != "" {
-			if err := t.Seek(60); err != nil {
-				log.Println(err)
-				t.cecErr = err
-			}
+		if err := t.Seek(60); err != nil {
+			log.Println(err)
+			t.cecErr = err
 		}
 	})
 	conn.On(cec.Rewind, func() {
-		if t.player != nil && t.playing != "" {
-			if err := t.Seek(-60); err != nil {
-				log.Println(err)
-				t.cecErr = err
-			}
+		if err := t.Seek(-60); err != nil {
+			log.Println(err)
+			t.cecErr = err
 		}
 	})
-	return t
+	return t, nil
 }
 
 func (tv *tv) Playing() string {
-	return tv.playing
+	playlist, err := tv.player.Playlist()
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	if len(playlist.Children) < 1 {
+		return ""
+	}
+	if len(playlist.Children[0].Children) < 1 {
+		return ""
+	}
+	return playlist.Children[0].Children[0].Name
 }
 
 func (tv *tv) Paused() bool {
-	if tv.player == nil {
-		return false
-	}
-	status, err := tv.player.PlaybackStatus()
+	status, err := tv.player.GetStatus()
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-	return status == "Paused"
+	return status.State == "paused"
 }
 
 func (tv *tv) CECErr() error {
@@ -99,72 +109,51 @@ func (tv *tv) CECErr() error {
 }
 
 func (tv *tv) Position() time.Duration {
-	if tv.player == nil {
-		return 0
+	status, err := tv.player.GetStatus()
+	if err != nil {
+		log.Println(err)
 	}
-	position, _ := tv.player.Position()
-	return time.Duration(position) * time.Microsecond
+	return time.Duration(status.Time) * time.Second
 }
 
 func (tv *tv) Duration() time.Duration {
-	if tv.player == nil {
+	playlist, err := tv.player.Playlist()
+	if err != nil {
+		log.Println(err)
 		return 0
 	}
-	duration, _ := tv.player.Duration()
-	return time.Duration(duration) * time.Microsecond
+	if len(playlist.Children) < 1 {
+		return 0
+	}
+	if len(playlist.Children[0].Children) < 1 {
+		return 0
+	}
+	return time.Duration(playlist.Children[0].Children[0].Duration) * time.Second
 }
 
 func (tv *tv) Play(filename string) error {
-	if tv.player != nil && tv.player.IsRunning() {
-		if err := tv.player.Quit(); err != nil {
-			return err
-		}
-	}
-	omxplayer.SetUser("root", "/root")
-	var err error
-	tv.player, err = omxplayer.New(filepath.Join(tv.root, filename))
-	if err != nil {
+	fullpath := filepath.Join(tv.root, filename)
+	log.Println("playing", fullpath)
+	if err := tv.player.Stop(); err != nil {
 		return err
 	}
-	tv.player.WaitForReady()
-	if err := tv.player.PlayPause(); err != nil {
+	if err := tv.player.EmptyPlaylist(); err != nil {
 		return err
 	}
-	tv.playing = filename
-	return nil
+	return tv.player.AddStart(fmt.Sprintf("file://%s", url.PathEscape(fullpath)))
 }
 
 func (tv *tv) Pause() error {
-	if tv.player == nil {
-		return nil
-	}
-	if err := tv.player.Pause(); err != nil {
-		return err
-	}
-	return nil
+	return tv.player.Pause()
 }
 
 func (tv *tv) Stop() error {
-	if tv.player == nil {
-		return nil
+	if err := tv.player.EmptyPlaylist(); err != nil {
+		return err
 	}
-	if tv.player.IsRunning() {
-		if err := tv.player.Quit(); err != nil {
-			return err
-		}
-	}
-	if !tv.player.IsRunning() {
-		tv.playing = ""
-		tv.player = nil
-		exec.Command("killall", "dbus-daemon").Run()
-	}
-	return nil
+	return tv.player.Stop()
 }
 
 func (tv *tv) Seek(d time.Duration) error {
-	if tv.player == nil {
-		return nil
-	}
-	_, err := tv.player.Seek(int64(d / time.Microsecond))
-	return err
+	return tv.player.Seek(fmt.Sprintf("%d", int64(d / time.Microsecond)))
 }

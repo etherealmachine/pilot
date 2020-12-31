@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/etherealmachine/pilot/tv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -279,7 +279,11 @@ func main() {
 	if *mocktv {
 		s.TV = tv.NewMock(*root)
 	} else {
-		s.TV = tv.New(*root)
+		var err error
+		s.TV, err = tv.New(*root)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	log.Println("pilot is up, looking for files to serve...")
