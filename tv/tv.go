@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/etherealmachine/cec"
-	vlc "github.com/CedArctic/go-vlc-ctrl"
+	"github.com/etherealmachine/pilot/cec"
+	"github.com/etherealmachine/pilot/vlcctrl"
 )
 
 type TV interface {
@@ -26,12 +26,12 @@ type TV interface {
 type tv struct {
 	cecErr  error
 	root    string
-	player  *vlc.VLC
+	player  *vlcctrl.VLC
 }
 
 // New returns a new TV.
 func New(root string) (TV, error) {
-	player, err := vlc.NewVLC("127.0.0.1", 8081, "raspberry")
+	player, err := vlcctrl.NewVLC("127.0.0.1", 8081, "raspberry")
 	if err != nil {
 		return nil, err
 	}

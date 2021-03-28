@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -17,20 +16,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/etherealmachine/pilot/tv"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
-	root         = flag.String("root", ".", "Root folder to serve media from.")
-	folders      = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
-	addr         = flag.String("addr", ":80", "Address to serve from.")
-	password     = flag.String("password", "", "Login password.")
-	logdir       = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
-	mocktv       = flag.Bool("mocktv", false, "Use mock TV for testing.")
-	unvulcanized = flag.Bool("unvulcanized", false, "Serve unvulcanized app for testing.")
-	filesjson    = flag.String("filesjson", "", "Serve given file as files.json for testing.")
+	root     = flag.String("root", ".", "Root folder to serve media from.")
+	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
+	addr     = flag.String("addr", ":80", "Address to serve from.")
+	password = flag.String("password", "", "Login password.")
+	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
+	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
+
+	indexTemplate = template.Must(template.ParseFiles("index.html"))
 
 	httplog *log.Logger
 )
@@ -180,79 +179,14 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) FilesHandler(w http.ResponseWriter, r *http.Request) {
-	s.RLock()
-	defer s.RUnlock()
-	if *filesjson != "" {
-		f, err := os.Open(*filesjson)
-		if err != nil {
-			if os.IsNotExist(err) {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-		fi, err := f.Stat()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-		http.ServeContent(w, r, *filesjson, fi.ModTime(), f)
-		return
-	}
-	if h := r.Header.Get("If-None-Match"); h != "" && h == s.filesHash {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("ETag", s.filesHash)
-	bs, err := json.Marshal(s.Files)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
-	w.Write(bs)
-}
-
 func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "favicon.ico")
 }
 
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	if h := r.Header.Get("If-None-Match"); h != "" && h == s.indexHash {
-		w.WriteHeader(http.StatusNotModified)
-		return
+	if err := indexTemplate.Execute(w, nil); err != nil {
+		log.Println(err)
 	}
-	bs, err := ioutil.ReadFile("index.html")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(bs)
-		return
-	}
-	h := sha256.New()
-	h.Write(bs)
-	encodedBytes := new(bytes.Buffer)
-	encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
-	encoder.Write(h.Sum(nil))
-	encoder.Close()
-	s.indexHash = encodedBytes.String()
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Cache-Control", "max-age=31536000")
-	w.Header().Set("ETag", s.indexHash)
-	w.Write(bs)
-}
-
-func (s *server) UnvulcanizedHandler(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/src") || strings.HasPrefix(r.URL.Path, "/bower_components") {
-		http.ServeFile(w, r, filepath.Join("app", r.URL.Path))
-		return
-	}
-	http.ServeFile(w, r, "app/index.html")
 }
 
 func main() {
@@ -295,13 +229,8 @@ func main() {
 
 	http.Handle("/controls", rpcServer(s))
 	http.HandleFunc("/download", s.DownloadHandler)
-	http.HandleFunc("/files.json", s.FilesHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
-	if *unvulcanized {
-		http.HandleFunc("/", s.UnvulcanizedHandler)
-	} else {
-		http.HandleFunc("/", s.IndexHandler)
-	}
+	http.HandleFunc("/", s.IndexHandler)
 
 	log.Printf("Server listening at %s", *addr)
 	log.Fatal(http.ListenAndServe(
