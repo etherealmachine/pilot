@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +30,14 @@ var (
 	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
 	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
 
-	indexTemplate = template.Must(template.ParseFiles("index.html"))
+	indexTemplate = template.Must(template.New("index.html").Funcs(template.FuncMap{
+		"slugify":    slugify,
+		"trimPrefix": strings.TrimPrefix,
+	}).ParseFiles("index.html"))
+	playTemplate = template.Must(template.New("play.html").Funcs(template.FuncMap{
+		"slugify":    slugify,
+		"trimPrefix": strings.TrimPrefix,
+	}).ParseFiles("play.html"))
 
 	httplog *log.Logger
 )
@@ -64,7 +72,6 @@ type server struct {
 	sync.RWMutex
 	Files     []string
 	filesHash string
-	indexHash string
 	TV        tv.TV
 }
 
@@ -183,10 +190,95 @@ func (s *server) FaviconHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "favicon.ico")
 }
 
+func (s *server) StaticHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "pure-min.css")
+}
+
+type IndexTemplateParams struct {
+	Movies []string
+	Shows  map[string]map[string][]string
+	Filter string
+}
+
+var re = regexp.MustCompile("[^a-z0-9]+")
+
+func slugify(s ...string) string {
+	var slugs []string
+	for _, si := range s {
+		slugs = append(slugs, strings.Trim(re.ReplaceAllString(strings.ToLower(si), "-"), "-"))
+	}
+	return strings.Join(slugs, "-")
+}
+
+func (p *IndexTemplateParams) InsertShow(show string, season string, episode string) {
+	if p.Shows[show] == nil {
+		p.Shows[show] = make(map[string][]string)
+	}
+	p.Shows[show][season] = append(p.Shows[show][season], episode)
+}
+
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	if err := indexTemplate.Execute(w, nil); err != nil {
+	params := &IndexTemplateParams{
+		Shows:  make(map[string]map[string][]string),
+		Filter: "Movies",
+	}
+	filters, ok := r.URL.Query()["filter"]
+	if ok && len(filters) > 0 {
+		params.Filter = filters[0]
+	}
+	for _, f := range s.Files {
+		if !strings.HasPrefix(f, params.Filter) {
+			continue
+		}
+		if strings.HasPrefix(f, "Movies") {
+			params.Movies = append(params.Movies, f)
+		} else if strings.HasPrefix(f, "TV") {
+			path := strings.Split(f, "/")
+			if len(path) == 3 {
+				_, show, episode := path[0], path[1], path[2]
+				params.InsertShow(show, "", episode)
+			} else if len(path) == 4 {
+				_, show, season, episode := path[0], path[1], path[2], path[3]
+				params.InsertShow(show, season, episode)
+			} else {
+				panic(fmt.Sprintf("Failed to get episode information for %s", f))
+			}
+		}
+	}
+	if err := indexTemplate.Execute(w, params); err != nil {
 		log.Println(err)
 	}
+}
+
+type PlayTemplateParams struct {
+	File  string
+	Title string
+}
+
+func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
+	file, ok := r.URL.Query()["file"]
+	if !ok || len(file) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	title := filepath.Base(file[0])
+	ext := filepath.Ext(title)
+	params := &PlayTemplateParams{
+		File:  file[0],
+		Title: strings.TrimSuffix(title, ext),
+	}
+	if err := playTemplate.Execute(w, params); err != nil {
+		log.Println(err)
+	}
+}
+
+func (s *server) CastHandler(w http.ResponseWriter, r *http.Request) {
+	file, ok := r.URL.Query()["file"]
+	if !ok || len(file) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	log.Println(file[0])
 }
 
 func main() {
@@ -230,6 +322,9 @@ func main() {
 	http.Handle("/controls", rpcServer(s))
 	http.HandleFunc("/download", s.DownloadHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+	http.HandleFunc("/play", s.PlayHandler)
+	http.HandleFunc("/cast", s.CastHandler)
 	http.HandleFunc("/", s.IndexHandler)
 
 	log.Printf("Server listening at %s", *addr)
