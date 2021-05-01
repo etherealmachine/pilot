@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html style="width: 100%; height: 100%">
 
 <head>
 	<title>Pilot{{ if ne .Playing "" }} - {{ titleize .Playing }}{{ end }}</title>
 	<link rel="stylesheet" href="/static/bootstrap.min.css" />
 </head>
 
-<body>
+<body style="width: 100%; height: 100%">
 	<nav class="navbar navbar-expand-lg navbar-light bg-light">
-		<div class="container-fluid">
+		<div class="container-fluid" style="width: 100%; height: 100%">
 			<a class="navbar-brand" href="/">Pilot</a>
 			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
 				aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
@@ -26,23 +26,7 @@
 			</div>
 		</div>
 	</nav>
-	<div class="m-5">
-    {{ if ne .CECErr nil }}<p class="alert alert-warning">{{ .CECErr.Error }}</p>{{ end }}
-    <div class="d-flex">
-      {{ if ne .Playing "" }}
-        {{ .Position }}
-        {{ .Duration }}
-        <a href="/cast?action=rewind" class="btn btn-dark">⏪</a>
-        {{ if eq .Paused true }}
-          <a href="/cast?action=play" class="btn btn-light">▶️</a>
-        {{ else }}
-          <a href="/cast?action=pause" class="btn btn-dark">⏸</a>
-        {{ end }}
-        <a href="/cast?action=stop" class="btn btn-dark">⏹</a>
-        <a href="/cast?action=fastforward" class="btn btn-dark">⏩</a>
-      {{ end }}
-    </div>
-	<div>
+	<iframe src="{{ .UISrc }}" style="width: 100%; height: 100%"></iframe>
 	<script type="text/javascript" src="/static/bootstrap.min.js"></script>
 </body>
 

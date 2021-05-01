@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/etherealmachine/pilot/tv"
+	"github.com/etherealmachine/pilot/vlcctrl"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -22,10 +23,9 @@ import (
 var (
 	root     = flag.String("root", ".", "Root folder to serve media from.")
 	folders  = flag.String("folders", "TV,Movies", "Comma-separated list of folders to serve.")
-	addr     = flag.String("addr", ":80", "Address to serve from.")
+	port     = flag.Int("port", 8080, "Port to serve from.")
 	password = flag.String("password", "", "Login password.")
 	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
-	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
 
 	httplog *log.Logger
 )
@@ -59,7 +59,7 @@ var video = map[string]bool{
 type server struct {
 	sync.RWMutex
 	Files     []string
-	TV        tv.TV
+	Player    vlcctrl.VLC
 	Templates map[string]*template.Template
 }
 
@@ -107,6 +107,33 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 			return
 		}
 	})
+}
+
+func (s *server) CurrentlyPlaying() string {
+	playlist, err := s.Player.Playlist()
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	if len(playlist.Children) < 1 {
+		return ""
+	}
+	if len(playlist.Children[0].Children) < 1 {
+		return ""
+	}
+	return playlist.Children[0].Children[0].Name
+}
+
+func (s *server) PlayOnTV(filename string) error {
+	fullpath := filepath.Join(*root, filename)
+	log.Println("playing", fullpath)
+	if err := s.Player.Stop(); err != nil {
+		return err
+	}
+	if err := s.Player.EmptyPlaylist(); err != nil {
+		return err
+	}
+	return s.Player.AddStart(fmt.Sprintf("file://%s", url.PathEscape(fullpath)))
 }
 
 func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +233,7 @@ func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 		s.reload()
 	}
 	params := &IndexTemplateParams{
-		Playing: s.TV.Playing(),
+		Playing: s.CurrentlyPlaying(),
 		Shows:   make(map[string]map[string][]string),
 		Filter:  "Movies",
 	}
@@ -261,45 +288,39 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type CastTemplateParams struct {
-	Playing  string
-	Paused   bool
-	CECErr   error
-	Position int64
-	Duration int64
+	Playing string
+	UISrc   string
 }
 
 func (s *server) CastHandler(w http.ResponseWriter, r *http.Request) {
-	actions := r.URL.Query()["action"]
-	var action, file string
-	if len(actions) > 0 {
-		action = actions[0]
-	}
+	var file string
 	files := r.URL.Query()["file"]
 	if len(files) > 0 {
 		file = files[0]
 	}
-	if file != "" && file != s.TV.Playing() {
-		s.TV.Play(file)
+	if file != "" && file != s.CurrentlyPlaying() {
+		s.PlayOnTV(file)
 	}
-	if action == "stop" {
-		s.TV.Stop()
-	}
-	if action == "pause" {
-		s.TV.Pause()
-	}
-	if action == "play" {
-		s.TV.Play(s.TV.Playing())
-	}
+	publicAddr := GetOutboundIP()
 	params := &CastTemplateParams{
-		Playing:  s.TV.Playing(),
-		Paused:   s.TV.Paused(),
-		CECErr:   s.TV.CECErr(),
-		Position: int64(s.TV.Position()),
-		Duration: int64(s.TV.Duration()),
+		Playing: s.CurrentlyPlaying(),
+		UISrc:   fmt.Sprintf("http://%s:%d", publicAddr.String(), *port+1),
 	}
 	if err := s.Templates["cast.html"].Execute(w, params); err != nil {
 		log.Println(err)
 	}
+}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
 }
 
 func (s *server) reload() {
@@ -323,24 +344,23 @@ func main() {
 		}, "", log.Flags())
 		log.SetOutput(&lumberjack.Logger{
 			Filename: filepath.Join(*logdir, "output.log"),
-			MaxSize:  50, // megabytes
-			MaxAge:   30, //days
+			MaxSize:  50, // megabytes MaxAge:   30, //days
 		})
 	} else {
 		httplog = log.New(os.Stderr, "", log.Flags())
 	}
 
+	player, err := vlcctrl.NewVLC("127.0.0.1", 8081, "raspberry")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err = player.GetStatus(); err != nil {
+		log.Fatal(fmt.Errorf("error, expected VLC on port 8081, got: %s", err))
+	}
+
 	s := &server{
 		Templates: make(map[string]*template.Template),
-	}
-	if *mocktv {
-		s.TV = tv.NewMock(*root)
-	} else {
-		var err error
-		s.TV, err = tv.New(*root)
-		if err != nil {
-			log.Fatal(err)
-		}
+		Player:    player,
 	}
 	for _, t := range []string{"index.html", "play.html", "login.html", "cast.html"} {
 		s.Templates[t] = template.Must(template.New(t).Funcs(template.FuncMap{
@@ -363,8 +383,7 @@ func main() {
 	http.HandleFunc("/cast", s.CastHandler)
 	http.HandleFunc("/", s.IndexHandler)
 
-	log.Printf("Server listening at %s", *addr)
 	log.Fatal(http.ListenAndServe(
-		*addr,
+		fmt.Sprintf(":%d", *port),
 		s.authenticate(logRequests(http.DefaultServeMux))))
 }
