@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/etherealmachine/pilot/cec"
 	"github.com/etherealmachine/pilot/vlcctrl"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -59,7 +60,7 @@ var video = map[string]bool{
 type server struct {
 	sync.RWMutex
 	Files     []string
-	Player    vlcctrl.VLC
+	Player    *vlcctrl.VLC
 	Templates map[string]*template.Template
 }
 
@@ -331,6 +332,25 @@ func (s *server) reload() {
 	s.Unlock()
 }
 
+func setupCEC(p *vlcctrl.VLC) {
+	conn, err := cec.Open("", "pilot")
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn.On(cec.Pause, func() {
+		p.Pause()
+	})
+	conn.On(cec.Play, func() {
+		p.Play()
+	})
+	conn.On(cec.Stop, func() {
+		if err := p.EmptyPlaylist(); err != nil {
+			log.Fatal(err)
+		}
+		p.Stop()
+	})
+}
+
 func main() {
 	flag.Parse()
 
@@ -358,9 +378,11 @@ func main() {
 		log.Fatal(fmt.Errorf("error, expected VLC on port 8081, got: %s", err))
 	}
 
+	setupCEC(&player)
+
 	s := &server{
 		Templates: make(map[string]*template.Template),
-		Player:    player,
+		Player:    &player,
 	}
 	for _, t := range []string{"index.html", "play.html", "login.html", "cast.html"} {
 		s.Templates[t] = template.Must(template.New(t).Funcs(template.FuncMap{
