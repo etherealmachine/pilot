@@ -9,7 +9,7 @@
 <body>
 	<nav class="navbar navbar-expand-lg navbar-light bg-light">
 		<div class="container-fluid">
-			<a class="navbar-brand" href="#">Pilot</a>
+			<a class="navbar-brand" href="/">Pilot</a>
 			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
 				aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
@@ -23,11 +23,9 @@
 						<a class="nav-link {{ if eq .Filter "TV" }}active{{ end }}" href="/?filter=TV">TV</a>
 					</li>
 				</ul>
-				<form class="d-flex">
-					<input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
-					<button class="btn btn-success" type="submit">Search</button>
-				</form>
 			</div>
+			{{ if ne .Playing "" }}<a href="/cast">Now Playing - {{ titleize .Playing }}</a>{{ end }}
+      <a href="/?reload=true" class="btn btn-light">🔄</a>
 		</div>
 	</nav>
 	<div class="mx-5">

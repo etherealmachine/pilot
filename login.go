@@ -1,7 +1,6 @@
 package main
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -11,8 +10,6 @@ import (
 )
 
 var bakery *securecookie.SecureCookie
-
-var loginTemplate = template.Must(template.ParseFiles("login.html"))
 
 func init() {
 	bakery = securecookie.New(

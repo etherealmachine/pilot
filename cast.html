@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Pilot{{ if ne .Playing "" }} - {{ titleize .Playing }}{{ end }}</title>
+	<link rel="stylesheet" href="/static/bootstrap.min.css" />
+</head>
+
+<body>
+	<nav class="navbar navbar-expand-lg navbar-light bg-light">
+		<div class="container-fluid">
+			<a class="navbar-brand" href="/">Pilot</a>
+			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+				aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+			<div class="collapse navbar-collapse" id="navbarSupportedContent">
+				<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+					<li class="nav-item">
+						<a class="nav-link" aria-current="page" href="/?filter=Movies">Movies</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link" href="/?filter=TV">TV</a>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</nav>
+	<div class="m-5">
+    {{ if ne .CECErr nil }}<p class="alert alert-warning">{{ .CECErr.Error }}</p>{{ end }}
+    <div class="d-flex">
+      {{ if ne .Playing "" }}
+        {{ .Position }}
+        {{ .Duration }}
+        <a href="/cast?action=rewind" class="btn btn-dark">⏪</a>
+        {{ if eq .Paused true }}
+          <a href="/cast?action=play" class="btn btn-light">▶️</a>
+        {{ else }}
+          <a href="/cast?action=pause" class="btn btn-dark">⏸</a>
+        {{ end }}
+        <a href="/cast?action=stop" class="btn btn-dark">⏹</a>
+        <a href="/cast?action=fastforward" class="btn btn-dark">⏩</a>
+      {{ end }}
+    </div>
+	<div>
+	<script type="text/javascript" src="/static/bootstrap.min.js"></script>
+</body>
+
+</html>

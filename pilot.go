@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"html/template"
@@ -29,15 +26,6 @@ var (
 	password = flag.String("password", "", "Login password.")
 	logdir   = flag.String("logdir", "", "Location to save logs to. If empty, logs to stdout.")
 	mocktv   = flag.Bool("mocktv", false, "Use mock TV for testing.")
-
-	indexTemplate = template.Must(template.New("index.html").Funcs(template.FuncMap{
-		"slugify":    slugify,
-		"trimPrefix": strings.TrimPrefix,
-	}).ParseFiles("index.html"))
-	playTemplate = template.Must(template.New("play.html").Funcs(template.FuncMap{
-		"slugify":    slugify,
-		"trimPrefix": strings.TrimPrefix,
-	}).ParseFiles("play.html"))
 
 	httplog *log.Logger
 )
@@ -71,8 +59,8 @@ var video = map[string]bool{
 type server struct {
 	sync.RWMutex
 	Files     []string
-	filesHash string
 	TV        tv.TV
+	Templates map[string]*template.Template
 }
 
 func walker(files *[]string) func(string, os.FileInfo, error) error {
@@ -121,18 +109,6 @@ func (s *server) authenticate(handler http.Handler) http.Handler {
 	})
 }
 
-func calculateHash(files []string) string {
-	h := sha256.New()
-	for _, f := range files {
-		h.Write([]byte(f))
-	}
-	encodedBytes := new(bytes.Buffer)
-	encoder := base64.NewEncoder(base64.StdEncoding, encodedBytes)
-	encoder.Write(h.Sum(nil))
-	encoder.Close()
-	return encodedBytes.String()
-}
-
 func (s *server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	file, err := url.QueryUnescape(r.FormValue("file"))
 	if err != nil {
@@ -177,7 +153,7 @@ func (s *server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 	w.WriteHeader(http.StatusFound)
-	if err := loginTemplate.Execute(w, &struct {
+	if err := s.Templates["login.html"].Execute(w, &struct {
 		Error bool
 	}{
 		Error: pass != "",
@@ -195,9 +171,10 @@ func (s *server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type IndexTemplateParams struct {
-	Movies []string
-	Shows  map[string]map[string][]string
-	Filter string
+	Playing string
+	Movies  []string
+	Shows   map[string]map[string][]string
+	Filter  string
 }
 
 var re = regexp.MustCompile("[^a-z0-9]+")
@@ -210,6 +187,12 @@ func slugify(s ...string) string {
 	return strings.Join(slugs, "-")
 }
 
+func titleize(s string) string {
+	title := filepath.Base(s)
+	ext := filepath.Ext(title)
+	return strings.TrimSuffix(title, ext)
+}
+
 func (p *IndexTemplateParams) InsertShow(show string, season string, episode string) {
 	if p.Shows[show] == nil {
 		p.Shows[show] = make(map[string][]string)
@@ -218,9 +201,14 @@ func (p *IndexTemplateParams) InsertShow(show string, season string, episode str
 }
 
 func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
+	reload := r.URL.Query()["reload"]
+	if len(reload) > 0 {
+		s.reload()
+	}
 	params := &IndexTemplateParams{
-		Shows:  make(map[string]map[string][]string),
-		Filter: "Movies",
+		Playing: s.TV.Playing(),
+		Shows:   make(map[string]map[string][]string),
+		Filter:  "Movies",
 	}
 	filters, ok := r.URL.Query()["filter"]
 	if ok && len(filters) > 0 {
@@ -245,7 +233,7 @@ func (s *server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := indexTemplate.Execute(w, params); err != nil {
+	if err := s.Templates["index.html"].Execute(w, params); err != nil {
 		log.Println(err)
 	}
 }
@@ -267,18 +255,59 @@ func (s *server) PlayHandler(w http.ResponseWriter, r *http.Request) {
 		File:  file[0],
 		Title: strings.TrimSuffix(title, ext),
 	}
-	if err := playTemplate.Execute(w, params); err != nil {
+	if err := s.Templates["play.html"].Execute(w, params); err != nil {
 		log.Println(err)
 	}
 }
 
+type CastTemplateParams struct {
+	Playing  string
+	Paused   bool
+	CECErr   error
+	Position int64
+	Duration int64
+}
+
 func (s *server) CastHandler(w http.ResponseWriter, r *http.Request) {
-	file, ok := r.URL.Query()["file"]
-	if !ok || len(file) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	actions := r.URL.Query()["action"]
+	var action, file string
+	if len(actions) > 0 {
+		action = actions[0]
 	}
-	log.Println(file[0])
+	files := r.URL.Query()["file"]
+	if len(files) > 0 {
+		file = files[0]
+	}
+	if file != "" && file != s.TV.Playing() {
+		s.TV.Play(file)
+	}
+	if action == "stop" {
+		s.TV.Stop()
+	}
+	if action == "pause" {
+		s.TV.Pause()
+	}
+	if action == "play" {
+		s.TV.Play(s.TV.Playing())
+	}
+	params := &CastTemplateParams{
+		Playing:  s.TV.Playing(),
+		Paused:   s.TV.Paused(),
+		CECErr:   s.TV.CECErr(),
+		Position: int64(s.TV.Position()),
+		Duration: int64(s.TV.Duration()),
+	}
+	if err := s.Templates["cast.html"].Execute(w, params); err != nil {
+		log.Println(err)
+	}
+}
+
+func (s *server) reload() {
+	var files []string
+	filepath.Walk(*root, walker(&files))
+	s.Lock()
+	s.Files = files
+	s.Unlock()
 }
 
 func main() {
@@ -301,7 +330,9 @@ func main() {
 		httplog = log.New(os.Stderr, "", log.Flags())
 	}
 
-	s := &server{}
+	s := &server{
+		Templates: make(map[string]*template.Template),
+	}
 	if *mocktv {
 		s.TV = tv.NewMock(*root)
 	} else {
@@ -311,15 +342,20 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	for _, t := range []string{"index.html", "play.html", "login.html", "cast.html"} {
+		s.Templates[t] = template.Must(template.New(t).Funcs(template.FuncMap{
+			"slugify":    slugify,
+			"titleize":   titleize,
+			"trimPrefix": strings.TrimPrefix,
+		}).ParseFiles(t))
+	}
 
 	log.Println("pilot is up, looking for files to serve...")
 	s.Lock()
 	filepath.Walk(*root, walker(&s.Files))
-	s.filesHash = calculateHash(s.Files)
 	s.Unlock()
 	log.Printf("found %d files", len(s.Files))
 
-	http.Handle("/controls", rpcServer(s))
 	http.HandleFunc("/download", s.DownloadHandler)
 	http.HandleFunc("/favicon.ico", s.FaviconHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
